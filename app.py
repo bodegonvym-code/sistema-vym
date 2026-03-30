@@ -610,6 +610,55 @@ if opcion == "📦 INVENTARIO":
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"Error: {e}")
+                        
+                        # --- Códigos alternos (NUEVO) ---
+                        st.divider()
+                        st.subheader("🔗 Códigos de barras alternos")
+                        with st.container():
+                            # Mostrar códigos existentes
+                            if st.session_state.online_mode:
+                                alt_codes = db.table("codigos_alternos").select("*").eq("producto_id", prod['id']).execute()
+                            else:
+                                # En modo offline no se manejan códigos alternos (se omite)
+                                alt_codes = type('obj', (object,), {'data': []})()
+                            
+                            if alt_codes.data:
+                                st.write("**Códigos actuales:**")
+                                for ac in alt_codes.data:
+                                    col1, col2 = st.columns([4, 1])
+                                    with col1:
+                                        st.code(ac["codigo"])
+                                    with col2:
+                                        if st.button("❌", key=f"del_{ac['id']}"):
+                                            if st.session_state.online_mode:
+                                                db.table("codigos_alternos").delete().eq("id", ac["id"]).execute()
+                                            st.success("Código eliminado")
+                                            time.sleep(1)
+                                            st.rerun()
+                            else:
+                                st.info("No hay códigos alternos para este producto.")
+                            
+                            # Agregar nuevo código
+                            nuevo_codigo_alt = st.text_input("Nuevo código de barras (opcional)", key=f"new_alt_{prod['id']}")
+                            if st.button("➕ Agregar código", key=f"add_alt_{prod['id']}"):
+                                if nuevo_codigo_alt.strip():
+                                    try:
+                                        if st.session_state.online_mode:
+                                            db.table("codigos_alternos").insert({
+                                                "producto_id": prod['id'],
+                                                "codigo": nuevo_codigo_alt.strip()
+                                            }).execute()
+                                        else:
+                                            # En modo offline no se guardan códigos alternos
+                                            st.warning("Modo offline: no se pueden agregar códigos alternos")
+                                        st.success("Código agregado correctamente")
+                                        time.sleep(1)
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Error: {e}")
+                                else:
+                                    st.warning("Escribe un código válido")
+                        # --- Fin código alternos ---
                 
                 # ELIMINAR PRODUCTO
                 st.divider()
