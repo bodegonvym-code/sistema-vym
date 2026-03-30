@@ -611,13 +611,14 @@ if opcion == "📦 INVENTARIO":
                                 except Exception as e:
                                     st.error(f"Error: {e}")
                         
-                        # --- Códigos alternos (NUEVO) ---
+                        # --- Códigos alternos (CORREGIDO) ---
                         st.divider()
                         st.subheader("🔗 Códigos de barras alternos")
                         with st.container():
                             # Mostrar códigos existentes
                             if st.session_state.online_mode:
-                                alt_codes = db.table("codigos_alternos").select("*").eq("producto_id", prod['id']).execute()
+                                # Convertir prod['id'] a int para evitar error de serialización
+                                alt_codes = db.table("codigos_alternos").select("*").eq("producto_id", int(prod['id'])).execute()
                             else:
                                 # En modo offline no se manejan códigos alternos (se omite)
                                 alt_codes = type('obj', (object,), {'data': []})()
@@ -631,7 +632,7 @@ if opcion == "📦 INVENTARIO":
                                     with col2:
                                         if st.button("❌", key=f"del_{ac['id']}"):
                                             if st.session_state.online_mode:
-                                                db.table("codigos_alternos").delete().eq("id", ac["id"]).execute()
+                                                db.table("codigos_alternos").delete().eq("id", int(ac["id"])).execute()
                                             st.success("Código eliminado")
                                             time.sleep(1)
                                             st.rerun()
@@ -644,12 +645,12 @@ if opcion == "📦 INVENTARIO":
                                 if nuevo_codigo_alt.strip():
                                     try:
                                         if st.session_state.online_mode:
+                                            # Convertir prod['id'] a int aquí también
                                             db.table("codigos_alternos").insert({
-                                                "producto_id": prod['id'],
+                                                "producto_id": int(prod['id']),
                                                 "codigo": nuevo_codigo_alt.strip()
                                             }).execute()
                                         else:
-                                            # En modo offline no se guardan códigos alternos
                                             st.warning("Modo offline: no se pueden agregar códigos alternos")
                                         st.success("Código agregado correctamente")
                                         time.sleep(1)
