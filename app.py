@@ -308,20 +308,17 @@ else:
 with st.sidebar:
     # Logo y nombre
     st.markdown("""
-        <div style="background: linear-gradient(135deg, #0a1929 0%, #1a2b3c 100%); 
+        <div style="background: linear-gradient(135deg, #1E88E5 0%, #FF8C00 100%); 
                     padding: 2rem 1rem; 
                     border-radius: 0 0 20px 20px; 
                     text-align: center; 
                     margin-top: -1rem;
                     margin-bottom: 1rem;">
             <h1 style="color: white; margin: 0; font-size: 2.2rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">
-                🥂 BODEGÓN Y LICORERÍA
+                🛒 BODEGÓN VYM
             </h1>
-            <h2 style="color: #ffd700; margin: 0; font-size: 1.8rem; letter-spacing: 2px;">
-                MEDITERRANEO EXPRESS
-            </h2>
-            <p style="color: rgba(255,255,255,0.9); margin-top: 0.5rem; font-style: italic;">
-                Desde 2020 sirviendo con calidad
+            <p style="color: rgba(255,255,255,0.95); margin-top: 0.5rem; font-style: italic;">
+                Víveres, carnes y gaseosas
             </p>
         </div>
     """, unsafe_allow_html=True)
