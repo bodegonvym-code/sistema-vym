@@ -14,7 +14,7 @@ import requests  # <<< NUEVO
 # CONFIGURACIÓN INICIAL
 # ============================================
 st.set_page_config(
-    page_title="BODEGÓN Y LICORERÍA MEDITERRANEO EXPRESS",
+    page_title="BODEGÓN VYM",
     page_icon="🥂",
     layout="wide",
     initial_sidebar_state="expanded"
