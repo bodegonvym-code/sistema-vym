@@ -938,20 +938,56 @@ elif opcion == "🛒 PUNTO DE VENTA":
     with col_busqueda:
         st.subheader("🔍 Buscar productos")
         es_tasca = st.checkbox("🍷 Venta en tasca (+10%)", help="Los precios aumentan un 10% para consumo en el local")
-        busqueda = st.text_input("", placeholder="Escribe nombre del producto...", key="buscar_venta")
+        busqueda = st.text_input("", placeholder="Escribe nombre o código de barras...", key="buscar_venta")
         
         if busqueda:
             try:
                 if st.session_state.online_mode:
-                    response = db.table("inventario")\
+                    # 1. Buscar productos por nombre
+                    por_nombre = db.table("inventario")\
                         .select("*")\
                         .ilike("nombre", f"%{busqueda}%")\
                         .gt("stock", 0)\
-                        .order("nombre")\
-                        .limit(20)\
                         .execute()
-                    productos = response.data
+                    
+                    # 2. Buscar productos por código de barras principal
+                    por_codigo = db.table("inventario")\
+                        .select("*")\
+                        .ilike("codigo_barras", f"%{busqueda}%")\
+                        .gt("stock", 0)\
+                        .execute()
+                    
+                    # 3. Buscar productos por código alterno
+                    alt_matches = db.table("codigos_alternos")\
+                        .select("producto_id")\
+                        .eq("codigo", busqueda)\
+                        .execute()
+                    ids_alternos = [m["producto_id"] for m in alt_matches.data] if alt_matches.data else []
+                    
+                    productos_alternos = []
+                    if ids_alternos:
+                        productos_alternos = db.table("inventario")\
+                            .select("*")\
+                            .in_("id", ids_alternos)\
+                            .gt("stock", 0)\
+                            .execute()
+                    
+                    # Unir resultados evitando duplicados
+                    productos_dict = {}
+                    for prod in por_nombre.data:
+                        productos_dict[prod['id']] = prod
+                    for prod in por_codigo.data:
+                        productos_dict[prod['id']] = prod
+                    for prod in productos_alternos.data:
+                        productos_dict[prod['id']] = prod
+                    
+                    productos = list(productos_dict.values())
+                    # Ordenar por nombre
+                    productos.sort(key=lambda x: x['nombre'])
+                    # Limitar a 20 resultados
+                    productos = productos[:20]
                 else:
+                    # Modo offline: solo buscar por nombre (no tenemos códigos alternos)
                     datos_local = OfflineManager.obtener_datos_local('inventario')
                     if datos_local:
                         df_local = pd.DataFrame(datos_local)
@@ -1290,7 +1326,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                             
                             st.markdown(f"""
                             <div style="background:white; padding:20px; border-radius:10px; border:2px solid #1e3c72; max-width:800px; margin:0 auto;">
-                                <h3 style="text-align:center;">BODEGÓN Y LICORERÍA MEDITERRANEO</h3>
+                                <h3 style="text-align:center;">BODEGÓN VYM</h3>
                                 <p style="text-align:center;">{datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
                                 <p style="text-align:center;">Turno #{id_turno} | {mesa_actual['nombre']}{info_cliente}</p>
                                 <p style="text-align:center;">Cajero: {st.session_state.usuario_actual['nombre']}</p>
