@@ -17,8 +17,7 @@ st.set_page_config(
     page_title="BODEGÓN VYM",
     page_icon="🛒",  # Carrito de compras, más acorde al negocio
     layout="wide",
-    initial_sidebar_state="expanded"
-)
+    initial_sidebar_state="expanded")
 
 # ============================================
 # SISTEMA DE TEMA (OSCURO/CLARO)
