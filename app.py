@@ -15,7 +15,7 @@ import requests  # <<< NUEVO
 # ============================================
 st.set_page_config(
     page_title="BODEGÓN VYM",
-    page_icon="🥂",
+    page_icon="🛒",  # Carrito de compras, más acorde al negocio
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -35,10 +35,17 @@ def aplicar_tema():
                 color: #ffffff;
             }
             .main-header {
-                color: #ffffff !important;
+                color: #FF8C00 !important;  /* Naranja para destacar */
             }
             .stMarkdown, .stText, p, span, label, h1, h2, h3, h4 {
                 color: #ffffff !important;
+            }
+            .stButton > button {
+                background-color: #FF8C00 !important;
+                color: #000000 !important;  /* Texto negro sobre naranja */
+            }
+            .stButton > button:hover {
+                background-color: #E67E00 !important;
             }
             .stDataFrame {
                 background-color: #2d2d2d;
@@ -49,10 +56,22 @@ def aplicar_tema():
         return """
             <style>
             .stApp {
-                background-color: #f8f9fa;
+                background-color: #ffffff;  /* Fondo blanco */
+                color: #000000;            /* Letras negras */
             }
             .main-header {
-                color: #1e3c72 !important;
+                color: #1E88E5 !important;  /* Azul eléctrico */
+            }
+            .stButton > button {
+                background-color: #FF8C00 !important;  /* Naranja */
+                color: #ffffff !important;            /* Texto blanco sobre naranja */
+                border: none;
+            }
+            .stButton > button:hover {
+                background-color: #E67E00 !important;
+            }
+            .stMarkdown, .stText, p, span, label, h1, h2, h3, h4 {
+                color: #000000 !important;
             }
             </style>
         """
@@ -70,15 +89,20 @@ st.markdown("""
         text-align: center;
         margin-bottom: 2rem;
         text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        color: #1E88E5 !important;  /* Azul eléctrico */
     }
     .stButton > button {
+        background-color: #FF8C00;
+        color: white;
         border-radius: 8px;
         font-weight: 600;
         transition: all 0.3s ease;
+        border: none;
     }
     .stButton > button:hover {
         transform: translateY(-2px);
         box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        background-color: #E67E00;
     }
     .success-box {
         background-color: #d4edda;
@@ -102,11 +126,12 @@ st.markdown("""
         border-left: 5px solid #dc3545;
     }
     .product-card {
-        background-color: white;
+        background-color: #f9f9f9;
         padding: 1rem;
         border-radius: 10px;
         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         margin-bottom: 1rem;
+        color: #000000;
     }
     .badge-stock-bajo {
         background-color: #dc3545;
