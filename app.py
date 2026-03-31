@@ -871,21 +871,22 @@ elif opcion == "🛒 PUNTO DE VENTA":
         </div>
     """, unsafe_allow_html=True)
     
-    # SISTEMA DE CLIENTES
+    # SISTEMA DE CLIENTES (SOLO 4 CLIENTES)
     if 'clientes' not in st.session_state:
         st.session_state.clientes = {
             'cliente_1': {'nombre': 'Cliente 1', 'carrito': [], 'activa': True, 'cliente': ''},
             'cliente_2': {'nombre': 'Cliente 2', 'carrito': [], 'activa': True, 'cliente': ''},
             'cliente_3': {'nombre': 'Cliente 3', 'carrito': [], 'activa': True, 'cliente': ''},
             'cliente_4': {'nombre': 'Cliente 4', 'carrito': [], 'activa': True, 'cliente': ''}
-           
+        }
+    
     if 'cliente_actual' not in st.session_state:
         st.session_state.cliente_actual = 'cliente_1'
     
-    # SELECTOR DE CLIENTES
+    # SELECTOR DE CLIENTES (4 COLUMNAS)
     st.subheader("👥 Seleccionar Cliente / Cuenta")
     
-    col_clientes = st.columns(6)
+    col_clientes = st.columns(4)
     idx_cliente = 0
     for cliente_id, cliente_data in st.session_state.clientes.items():
         with col_clientes[idx_cliente]:
@@ -914,15 +915,15 @@ elif opcion == "🛒 PUNTO DE VENTA":
     with col_cliente_info1:
         st.markdown(f"### 👤 {cliente_actual['nombre']}")
     with col_cliente_info2:
-        if cliente_actual['nombre'] not in ['Barra', 'Para llevar']:
-            cliente = st.text_input(
-                "Nombre del cliente (opcional)",
-                value=cliente_actual.get('cliente', ''),
-                key="cliente_nombre",
-                placeholder="Ej: Juan Pérez"
-            )
-            if cliente != cliente_actual.get('cliente', ''):
-                st.session_state.clientes[st.session_state.cliente_actual]['cliente'] = cliente
+        # Mostrar campo de nombre para todos los clientes
+        cliente = st.text_input(
+            "Nombre del cliente (opcional)",
+            value=cliente_actual.get('cliente', ''),
+            key="cliente_nombre",
+            placeholder="Ej: Juan Pérez"
+        )
+        if cliente != cliente_actual.get('cliente', ''):
+            st.session_state.clientes[st.session_state.cliente_actual]['cliente'] = cliente
     with col_cliente_info3:
         if len(cliente_actual['carrito']) > 0:
             if st.button("🧹 Limpiar cuenta", use_container_width=True):
@@ -978,12 +979,10 @@ elif opcion == "🛒 PUNTO DE VENTA":
                         productos_dict[prod['id']] = prod
                     
                     productos = list(productos_dict.values())
-                    # Ordenar por nombre
                     productos.sort(key=lambda x: x['nombre'])
-                    # Limitar a 20 resultados
                     productos = productos[:20]
                 else:
-                    # Modo offline: solo buscar por nombre (no tenemos códigos alternos)
+                    # Modo offline: solo buscar por nombre
                     datos_local = OfflineManager.obtener_datos_local('inventario')
                     if datos_local:
                         df_local = pd.DataFrame(datos_local)
@@ -1017,7 +1016,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
                                             
                                             nueva_cantidad = cantidad_existente + 1
                                             
-                                            # Determinar precio final (solo mayorista si aplica)
                                             if nueva_cantidad >= prod['min_mayor']:
                                                 precio_final = float(prod['precio_mayor'])
                                                 tipo_precio = " (Mayor)"
@@ -1089,7 +1087,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
                                 st.session_state.clientes[st.session_state.cliente_actual]['carrito'].pop(idx)
                                 st.rerun()
                             else:
-                                # Recalcular precio mayor al cambiar cantidad
                                 prod_data = None
                                 if st.session_state.online_mode:
                                     try:
@@ -1349,8 +1346,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                             """, unsafe_allow_html=True)
                         
                         st.session_state.clientes[st.session_state.cliente_actual]['carrito'] = []
-                        if cliente_actual['nombre'] not in ['Barra', 'Para llevar']:
-                            st.session_state.clientes[st.session_state.cliente_actual]['cliente'] = ''
+                        st.session_state.clientes[st.session_state.cliente_actual]['cliente'] = ''
                         
                         if st.button("🔄 Cerrar y continuar"):
                             st.rerun()
@@ -1359,7 +1355,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                         st.error(f"Error al procesar venta: {e}")
             
             with col_btn3:
-                if len(carrito) > 0 and cliente_actual['nombre'] not in ['Barra', 'Para llevar']:
+                if len(carrito) > 0:
                     if st.button("⏸️ Dejar pendiente", use_container_width=True):
                         st.session_state.cliente_actual = 'cliente_1'
                         st.rerun()
