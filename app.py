@@ -853,7 +853,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA CON SEPARACIÓN DE CUENTAS (MEJORADO Y CORREGIDO)
+# MÓDULO 2: PUNTO DE VENTA CON SEPARACIÓN DE CLIENTES
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -871,65 +871,65 @@ elif opcion == "🛒 PUNTO DE VENTA":
         </div>
     """, unsafe_allow_html=True)
     
-    # SISTEMA DE MESAS / CUENTAS
-    if 'mesas' not in st.session_state:
-        st.session_state.mesas = {
-            'mesa_1': {'nombre': 'Mesa 1', 'carrito': [], 'activa': True, 'cliente': ''},
-            'mesa_2': {'nombre': 'Mesa 2', 'carrito': [], 'activa': True, 'cliente': ''},
-            'mesa_3': {'nombre': 'Mesa 3', 'carrito': [], 'activa': True, 'cliente': ''},
-            'mesa_4': {'nombre': 'Mesa 4', 'carrito': [], 'activa': True, 'cliente': ''},
+    # SISTEMA DE CLIENTES
+    if 'clientes' not in st.session_state:
+        st.session_state.clientes = {
+            'cliente_1': {'nombre': 'Cliente 1', 'carrito': [], 'activa': True, 'cliente': ''},
+            'cliente_2': {'nombre': 'Cliente 2', 'carrito': [], 'activa': True, 'cliente': ''},
+            'cliente_3': {'nombre': 'Cliente 3', 'carrito': [], 'activa': True, 'cliente': ''},
+            'cliente_4': {'nombre': 'Cliente 4', 'carrito': [], 'activa': True, 'cliente': ''},
             'barra': {'nombre': 'Barra', 'carrito': [], 'activa': True, 'cliente': 'Consumo en barra'},
             'llevar': {'nombre': 'Para llevar', 'carrito': [], 'activa': True, 'cliente': ''}
         }
     
-    if 'mesa_actual' not in st.session_state:
-        st.session_state.mesa_actual = 'mesa_1'
+    if 'cliente_actual' not in st.session_state:
+        st.session_state.cliente_actual = 'cliente_1'
     
-    # SELECTOR DE MESAS
-    st.subheader("🍽️ Seleccionar Mesa / Cuenta")
+    # SELECTOR DE CLIENTES
+    st.subheader("👥 Seleccionar Cliente / Cuenta")
     
-    col_mesas = st.columns(6)
-    idx_mesa = 0
-    for mesa_id, mesa_data in st.session_state.mesas.items():
-        with col_mesas[idx_mesa]:
-            if mesa_id == st.session_state.mesa_actual:
+    col_clientes = st.columns(6)
+    idx_cliente = 0
+    for cliente_id, cliente_data in st.session_state.clientes.items():
+        with col_clientes[idx_cliente]:
+            if cliente_id == st.session_state.cliente_actual:
                 bg_color = "#28a745"
-            elif len(mesa_data['carrito']) > 0:
+            elif len(cliente_data['carrito']) > 0:
                 bg_color = "#ffc107"
             else:
                 bg_color = "#6c757d"
             
             if st.button(
-                f"{mesa_data['nombre']}\n({len(mesa_data['carrito'])} items)",
-                key=f"mesa_{mesa_id}",
+                f"{cliente_data['nombre']}\n({len(cliente_data['carrito'])} items)",
+                key=f"cliente_{cliente_id}",
                 use_container_width=True,
-                type="primary" if mesa_id == st.session_state.mesa_actual else "secondary"
+                type="primary" if cliente_id == st.session_state.cliente_actual else "secondary"
             ):
-                st.session_state.mesa_actual = mesa_id
+                st.session_state.cliente_actual = cliente_id
                 st.rerun()
-        idx_mesa += 1
+        idx_cliente += 1
     
-    mesa_actual = st.session_state.mesas[st.session_state.mesa_actual]
+    cliente_actual = st.session_state.clientes[st.session_state.cliente_actual]
     st.divider()
     
-    # CABECERA DE LA MESA ACTUAL
-    col_mesa_info1, col_mesa_info2, col_mesa_info3 = st.columns([2, 2, 1])
-    with col_mesa_info1:
-        st.markdown(f"### 🍽️ {mesa_actual['nombre']}")
-    with col_mesa_info2:
-        if mesa_actual['nombre'] not in ['Barra', 'Para llevar']:
+    # CABECERA DEL CLIENTE ACTUAL
+    col_cliente_info1, col_cliente_info2, col_cliente_info3 = st.columns([2, 2, 1])
+    with col_cliente_info1:
+        st.markdown(f"### 👤 {cliente_actual['nombre']}")
+    with col_cliente_info2:
+        if cliente_actual['nombre'] not in ['Barra', 'Para llevar']:
             cliente = st.text_input(
                 "Nombre del cliente (opcional)",
-                value=mesa_actual.get('cliente', ''),
-                key="cliente_mesa",
+                value=cliente_actual.get('cliente', ''),
+                key="cliente_nombre",
                 placeholder="Ej: Juan Pérez"
             )
-            if cliente != mesa_actual.get('cliente', ''):
-                st.session_state.mesas[st.session_state.mesa_actual]['cliente'] = cliente
-    with col_mesa_info3:
-        if len(mesa_actual['carrito']) > 0:
-            if st.button("🧹 Limpiar mesa", use_container_width=True):
-                st.session_state.mesas[st.session_state.mesa_actual]['carrito'] = []
+            if cliente != cliente_actual.get('cliente', ''):
+                st.session_state.clientes[st.session_state.cliente_actual]['cliente'] = cliente
+    with col_cliente_info3:
+        if len(cliente_actual['carrito']) > 0:
+            if st.button("🧹 Limpiar cuenta", use_container_width=True):
+                st.session_state.clientes[st.session_state.cliente_actual]['carrito'] = []
                 st.rerun()
     
     col_busqueda, col_carrito = st.columns([1.2, 1.8])
@@ -937,7 +937,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
     # COLUMNA IZQUIERDA: BÚSQUEDA DE PRODUCTOS
     with col_busqueda:
         st.subheader("🔍 Buscar productos")
-        es_tasca = st.checkbox("🍷 Venta en tasca (+10%)", help="Los precios aumentan un 10% para consumo en el local")
         busqueda = st.text_input("", placeholder="Escribe nombre o código de barras...", key="buscar_venta")
         
         if busqueda:
@@ -1004,7 +1003,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                             if i + j < len(productos):
                                 prod = productos[i + j]
                                 precio_base = float(prod['precio_detal'])
-                                precio_unitario = precio_base * 1.10 if es_tasca else precio_base
+                                precio_unitario = precio_base
                                 
                                 with cols[j]:
                                     with st.container(border=True):
@@ -1013,7 +1012,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                                         st.markdown(f"<h3 style='color:#2a9d8f;'>${precio_unitario:.2f}</h3>", unsafe_allow_html=True)
                                         
                                         if st.button("➕ Agregar", key=f"add_{prod['id']}", use_container_width=True):
-                                            carrito_actual = mesa_actual['carrito']
+                                            carrito_actual = cliente_actual['carrito']
                                             cantidad_existente = 0
                                             for item in carrito_actual:
                                                 if item['id'] == prod['id']:
@@ -1021,20 +1020,16 @@ elif opcion == "🛒 PUNTO DE VENTA":
                                             
                                             nueva_cantidad = cantidad_existente + 1
                                             
-                                            # Determinar precio final
-                                            if nueva_cantidad >= prod['min_mayor'] and not es_tasca:
+                                            # Determinar precio final (solo mayorista si aplica)
+                                            if nueva_cantidad >= prod['min_mayor']:
                                                 precio_final = float(prod['precio_mayor'])
                                                 tipo_precio = " (Mayor)"
                                             else:
                                                 precio_final = precio_base
                                                 tipo_precio = ""
                                             
-                                            if es_tasca:
-                                                precio_final = precio_base * 1.10
-                                                tipo_precio = " (Tasca)"
-                                            
                                             encontrado = False
-                                            for item in st.session_state.mesas[st.session_state.mesa_actual]['carrito']:
+                                            for item in st.session_state.clientes[st.session_state.cliente_actual]['carrito']:
                                                 if item['id'] == prod['id']:
                                                     item['cantidad'] += 1
                                                     item['precio'] = precio_final
@@ -1043,7 +1038,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                                                     break
                                             
                                             if not encontrado:
-                                                st.session_state.mesas[st.session_state.mesa_actual]['carrito'].append({
+                                                st.session_state.clientes[st.session_state.cliente_actual]['carrito'].append({
                                                     "id": prod['id'],
                                                     "nombre": prod['nombre'],
                                                     "cantidad": 1,
@@ -1061,10 +1056,10 @@ elif opcion == "🛒 PUNTO DE VENTA":
         else:
             st.info("Escribe algo para buscar productos")
     
-    # COLUMNA DERECHA: CARRITO DE LA MESA ACTUAL (CORREGIDO para precio mayor)
+    # COLUMNA DERECHA: CARRITO DEL CLIENTE ACTUAL
     with col_carrito:
-        st.subheader(f"🛒 Carrito - {mesa_actual['nombre']}")
-        carrito = mesa_actual['carrito']
+        st.subheader(f"🛒 Carrito - {cliente_actual['nombre']}")
+        carrito = cliente_actual['carrito']
         
         if not carrito:
             st.info("Carrito vacío")
@@ -1088,17 +1083,16 @@ elif opcion == "🛒 PUNTO DE VENTA":
                             max_value=1000.0,
                             value=float(item['cantidad']),
                             step=1.0,
-                            key=f"cant_mesa_{idx}",
+                            key=f"cant_cliente_{idx}",
                             label_visibility="collapsed"
                         )
                         
                         if nueva_cant != item['cantidad']:
                             if nueva_cant == 0:
-                                st.session_state.mesas[st.session_state.mesa_actual]['carrito'].pop(idx)
+                                st.session_state.clientes[st.session_state.cliente_actual]['carrito'].pop(idx)
                                 st.rerun()
                             else:
-                                # <<< NUEVO: Recalcular precio mayor al cambiar cantidad
-                                # Obtener datos del producto desde el inventario en caché o Supabase
+                                # Recalcular precio mayor al cambiar cantidad
                                 prod_data = None
                                 if st.session_state.online_mode:
                                     try:
@@ -1108,7 +1102,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
                                     except:
                                         pass
                                 if not prod_data:
-                                    # Fallback: usar datos locales (inventario en caché)
                                     inventario_local = OfflineManager.obtener_datos_local('inventario')
                                     if inventario_local:
                                         for p in inventario_local:
@@ -1117,17 +1110,12 @@ elif opcion == "🛒 PUNTO DE VENTA":
                                                 break
                                 
                                 if prod_data:
-                                    # Determinar nuevo precio según cantidad y umbral
-                                    if nueva_cant >= prod_data['min_mayor'] and not es_tasca:
+                                    if nueva_cant >= prod_data['min_mayor']:
                                         nuevo_precio = float(prod_data['precio_mayor'])
                                         tipo_precio = " (Mayor)"
                                     else:
                                         nuevo_precio = float(prod_data['precio_detal'])
                                         tipo_precio = ""
-                                    
-                                    if es_tasca:
-                                        nuevo_precio = nuevo_precio * 1.10
-                                        tipo_precio = " (Tasca)"
                                     
                                     item['precio'] = nuevo_precio
                                     item['tipo_precio'] = tipo_precio
@@ -1140,8 +1128,8 @@ elif opcion == "🛒 PUNTO DE VENTA":
                         st.markdown(f"**${item['subtotal']:.2f}**")
                     
                     with col4:
-                        if st.button("❌", key=f"del_mesa_{idx}"):
-                            st.session_state.mesas[st.session_state.mesa_actual]['carrito'].pop(idx)
+                        if st.button("❌", key=f"del_cliente_{idx}"):
+                            st.session_state.clientes[st.session_state.cliente_actual]['carrito'].pop(idx)
                             st.rerun()
                     
                     total_venta_usd += item['subtotal']
@@ -1239,7 +1227,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
             
             with col_btn1:
                 if st.button("🔄 Limpiar carrito", use_container_width=True):
-                    st.session_state.mesas[st.session_state.mesa_actual]['carrito'] = []
+                    st.session_state.clientes[st.session_state.cliente_actual]['carrito'] = []
                     st.rerun()
             
             with col_btn2:
@@ -1274,7 +1262,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                                     'cantidad': item['cantidad']
                                 })
                         
-                        info_cliente = mesa_actual.get('cliente', '')
+                        info_cliente = cliente_actual.get('cliente', '')
                         if info_cliente:
                             info_cliente = f" - Cliente: {info_cliente}"
                         
@@ -1296,7 +1284,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                             "items": json.dumps(carrito),
                             "id_transaccion": str(int(datetime.now().timestamp())),
                             "fecha": datetime.now().isoformat(),
-                            "cliente": mesa_actual.get('cliente', '') or f"Mesa: {mesa_actual['nombre']}"
+                            "cliente": cliente_actual.get('cliente', '') or f"{cliente_actual['nombre']}"
                         }
                         
                         if st.session_state.online_mode:
@@ -1310,7 +1298,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                             })
                         
                         st.balloons()
-                        st.success(f"✅ Venta registrada - {mesa_actual['nombre']}{info_cliente}")
+                        st.success(f"✅ Venta registrada - {cliente_actual['nombre']}{info_cliente}")
                         
                         with st.expander("🧾 Ver Ticket", expanded=True):
                             items_ticket = ""
@@ -1328,7 +1316,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                             <div style="background:white; padding:20px; border-radius:10px; border:2px solid #1e3c72; max-width:800px; margin:0 auto;">
                                 <h3 style="text-align:center;">BODEGÓN VYM</h3>
                                 <p style="text-align:center;">{datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
-                                <p style="text-align:center;">Turno #{id_turno} | {mesa_actual['nombre']}{info_cliente}</p>
+                                <p style="text-align:center;">Turno #{id_turno} | {cliente_actual['nombre']}{info_cliente}</p>
                                 <p style="text-align:center;">Cajero: {st.session_state.usuario_actual['nombre']}</p>
                                 <hr>
                                 <table style="width:100%; border-collapse: collapse;">
@@ -1363,9 +1351,9 @@ elif opcion == "🛒 PUNTO DE VENTA":
                             </div>
                             """, unsafe_allow_html=True)
                         
-                        st.session_state.mesas[st.session_state.mesa_actual]['carrito'] = []
-                        if mesa_actual['nombre'] not in ['Barra', 'Para llevar']:
-                            st.session_state.mesas[st.session_state.mesa_actual]['cliente'] = ''
+                        st.session_state.clientes[st.session_state.cliente_actual]['carrito'] = []
+                        if cliente_actual['nombre'] not in ['Barra', 'Para llevar']:
+                            st.session_state.clientes[st.session_state.cliente_actual]['cliente'] = ''
                         
                         if st.button("🔄 Cerrar y continuar"):
                             st.rerun()
@@ -1374,9 +1362,9 @@ elif opcion == "🛒 PUNTO DE VENTA":
                         st.error(f"Error al procesar venta: {e}")
             
             with col_btn3:
-                if len(carrito) > 0 and mesa_actual['nombre'] not in ['Barra', 'Para llevar']:
+                if len(carrito) > 0 and cliente_actual['nombre'] not in ['Barra', 'Para llevar']:
                     if st.button("⏸️ Dejar pendiente", use_container_width=True):
-                        st.session_state.mesa_actual = 'mesa_1'
+                        st.session_state.cliente_actual = 'cliente_1'
                         st.rerun()
 
 # ============================================
