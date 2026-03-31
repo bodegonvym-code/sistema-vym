@@ -878,10 +878,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
             'cliente_2': {'nombre': 'Cliente 2', 'carrito': [], 'activa': True, 'cliente': ''},
             'cliente_3': {'nombre': 'Cliente 3', 'carrito': [], 'activa': True, 'cliente': ''},
             'cliente_4': {'nombre': 'Cliente 4', 'carrito': [], 'activa': True, 'cliente': ''},
-            'barra': {'nombre': 'Barra', 'carrito': [], 'activa': True, 'cliente': 'Consumo en barra'},
-            'llevar': {'nombre': 'Para llevar', 'carrito': [], 'activa': True, 'cliente': ''}
-        }
-    
+           
     if 'cliente_actual' not in st.session_state:
         st.session_state.cliente_actual = 'cliente_1'
     
