@@ -260,7 +260,7 @@ else:
     st.session_state.db_connected = False
 
 # ============================================
-# SISTEMA DE USUARIOS (RÁPIDO)
+# SISTEMA DE USUARIOS CON PERSISTENCIA EN URL
 # ============================================
 USUARIOS = {
     'admin': {'nombre': 'Administrador', 'clave': '1234', 'rol': 'admin'},
@@ -273,34 +273,68 @@ if 'usuario_actual' not in st.session_state:
 def login(usuario, clave):
     if usuario in USUARIOS and USUARIOS[usuario]['clave'] == clave:
         st.session_state.usuario_actual = USUARIOS[usuario]
+        # Guardar usuario en la URL para persistencia
+        st.query_params['usuario'] = usuario
         return True
     return False
 
 def logout():
     st.session_state.usuario_actual = None
+    st.session_state.id_turno = None  # Limpiar turno
+    # Limpiar parámetros de la URL
+    if 'usuario' in st.query_params:
+        del st.query_params['usuario']
+    if 'turno' in st.query_params:
+        del st.query_params['turno']
+
+# Intentar restaurar sesión desde la URL al inicio
+if st.session_state.usuario_actual is None and 'usuario' in st.query_params:
+    usuario = st.query_params['usuario']
+    if usuario in USUARIOS:
+        # Restauramos el usuario (sin verificar clave, porque ya se autenticó antes)
+        st.session_state.usuario_actual = USUARIOS[usuario]
 
 # ============================================
-# VERIFICAR TURNO ACTIVO (MEJORADO)
+# VERIFICAR TURNO ACTIVO (PERSISTENTE)
 # ============================================
-if st.session_state.online_mode:
+def restaurar_turno_activo():
+    """Busca un turno abierto para el usuario actual y lo restaura en session_state."""
+    if not st.session_state.online_mode or st.session_state.usuario_actual is None:
+        return None
+    
     try:
-        response = db.table("cierres").select("*").eq("estado", "abierto").order("fecha_apertura", desc=True).limit(1).execute()
-        turno_activo = response.data[0] if response.data else None
-        if turno_activo:
-            st.session_state.id_turno = turno_activo['id']
-            st.session_state.tasa_dia = turno_activo.get('tasa_apertura', 1.0)
-            st.session_state.fondo_bs = turno_activo.get('fondo_bs', 0)
-            st.session_state.fondo_usd = turno_activo.get('fondo_usd', 0)
-        else:
-            st.session_state.id_turno = None
+        # Buscar turno abierto del usuario actual
+        resp = db.table("cierres")\
+            .select("*")\
+            .eq("estado", "abierto")\
+            .eq("usuario_apertura", st.session_state.usuario_actual['nombre'])\
+            .order("fecha_apertura", desc=True)\
+            .limit(1)\
+            .execute()
+        
+        if hasattr(resp, 'data') and resp.data:
+            turno = resp.data[0]
+            st.session_state.id_turno = turno['id']
+            st.session_state.tasa_dia = turno.get('tasa_apertura', 60.0)
+            st.session_state.fondo_bs = turno.get('fondo_bs', 0)
+            st.session_state.fondo_usd = turno.get('fondo_usd', 0)
+            # Opcional: guardar ID del turno en la URL para restauración rápida
+            st.query_params['turno'] = str(turno['id'])
+            return turno['id']
     except Exception as e:
+        # Si hay error, no restauramos
+        pass
+    return None
+
+# Al inicio, si no hay turno activo, intentar restaurar
+if 'id_turno' not in st.session_state or st.session_state.id_turno is None:
+    # Si hay un turno en la URL, podríamos validarlo, pero mejor consultar la base de datos
+    # para asegurar que sigue abierto y pertenece al usuario actual.
+    if st.session_state.usuario_actual is not None:
+        restaurar_turno_activo()
+    else:
+        # Si no hay usuario, no puede haber turno activo
         st.session_state.id_turno = None
-else:
-    # Modo offline: usar datos locales
-    if 'id_turno' not in st.session_state:
-        st.session_state.id_turno = None
-    if 'tasa_dia' not in st.session_state:
-        st.session_state.tasa_dia = 60.0
 
 # ============================================
 # MENÚ LATERAL (REDISEÑADO)
