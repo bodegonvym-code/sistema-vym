@@ -853,7 +853,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA CON SEPARACIÓN DE CLIENTES
+# MÓDULO 2: PUNTO DE VENTA CON SEPARACIÓN DE CLIENTES (CORREGIDO)
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -915,7 +915,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
     with col_cliente_info1:
         st.markdown(f"### 👤 {cliente_actual['nombre']}")
     with col_cliente_info2:
-        # Mostrar campo de nombre para todos los clientes
         cliente = st.text_input(
             "Nombre del cliente (opcional)",
             value=cliente_actual.get('cliente', ''),
@@ -939,48 +938,44 @@ elif opcion == "🛒 PUNTO DE VENTA":
         
         if busqueda:
             try:
+                productos = []
+                
                 if st.session_state.online_mode:
-                    # 1. Buscar productos por nombre
-                    por_nombre = db.table("inventario")\
-                        .select("*")\
-                        .ilike("nombre", f"%{busqueda}%")\
-                        .gt("stock", 0)\
-                        .execute()
+                    # --- Búsqueda por nombre ---
+                    try:
+                        resp_nombre = db.table("inventario").select("*").ilike("nombre", f"%{busqueda}%").gt("stock", 0).execute()
+                        if hasattr(resp_nombre, 'data'):
+                            productos.extend(resp_nombre.data)
+                    except Exception as e:
+                        st.error(f"Error en búsqueda por nombre: {e}")
                     
-                    # 2. Buscar productos por código de barras principal
-                    por_codigo = db.table("inventario")\
-                        .select("*")\
-                        .ilike("codigo_barras", f"%{busqueda}%")\
-                        .gt("stock", 0)\
-                        .execute()
+                    # --- Búsqueda por código de barras principal ---
+                    try:
+                        resp_codigo = db.table("inventario").select("*").ilike("codigo_barras", f"%{busqueda}%").gt("stock", 0).execute()
+                        if hasattr(resp_codigo, 'data'):
+                            productos.extend(resp_codigo.data)
+                    except Exception as e:
+                        st.error(f"Error en búsqueda por código: {e}")
                     
-                    # 3. Buscar productos por código alterno
-                    alt_matches = db.table("codigos_alternos")\
-                        .select("producto_id")\
-                        .eq("codigo", busqueda)\
-                        .execute()
-                    ids_alternos = [m["producto_id"] for m in alt_matches.data] if alt_matches.data else []
+                    # --- Búsqueda por código alterno ---
+                    try:
+                        resp_alternos = db.table("codigos_alternos").select("producto_id").eq("codigo", busqueda).execute()
+                        if hasattr(resp_alternos, 'data') and resp_alternos.data:
+                            ids_alternos = [item["producto_id"] for item in resp_alternos.data]
+                            resp_prod_alt = db.table("inventario").select("*").in_("id", ids_alternos).gt("stock", 0).execute()
+                            if hasattr(resp_prod_alt, 'data'):
+                                productos.extend(resp_prod_alt.data)
+                    except Exception as e:
+                        st.error(f"Error en búsqueda por código alterno: {e}")
                     
-                    productos_alternos = []
-                    if ids_alternos:
-                        productos_alternos = db.table("inventario")\
-                            .select("*")\
-                            .in_("id", ids_alternos)\
-                            .gt("stock", 0)\
-                            .execute()
-                    
-                    # Unir resultados evitando duplicados
-                    productos_dict = {}
-                    for prod in por_nombre.data:
-                        productos_dict[prod['id']] = prod
-                    for prod in por_codigo.data:
-                        productos_dict[prod['id']] = prod
-                    for prod in productos_alternos.data:
-                        productos_dict[prod['id']] = prod
-                    
-                    productos = list(productos_dict.values())
+                    # Eliminar duplicados (por id)
+                    productos_unicos = {}
+                    for prod in productos:
+                        productos_unicos[prod['id']] = prod
+                    productos = list(productos_unicos.values())
                     productos.sort(key=lambda x: x['nombre'])
                     productos = productos[:20]
+                
                 else:
                     # Modo offline: solo buscar por nombre
                     datos_local = OfflineManager.obtener_datos_local('inventario')
@@ -989,8 +984,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
                         df_local = df_local[df_local['stock'] > 0]
                         df_local = df_local[df_local['nombre'].str.contains(busqueda, case=False, na=False)]
                         productos = df_local.to_dict('records')
-                    else:
-                        productos = []
                 
                 if productos:
                     for i in range(0, len(productos), 2):
@@ -999,13 +992,12 @@ elif opcion == "🛒 PUNTO DE VENTA":
                             if i + j < len(productos):
                                 prod = productos[i + j]
                                 precio_base = float(prod['precio_detal'])
-                                precio_unitario = precio_base
                                 
                                 with cols[j]:
                                     with st.container(border=True):
                                         st.markdown(f"**{prod['nombre']}**", help=prod['nombre'])
                                         st.caption(f"Stock: {prod['stock']:.0f}")
-                                        st.markdown(f"<h3 style='color:#2a9d8f;'>${precio_unitario:.2f}</h3>", unsafe_allow_html=True)
+                                        st.markdown(f"<h3 style='color:#2a9d8f;'>${precio_base:.2f}</h3>", unsafe_allow_html=True)
                                         
                                         if st.button("➕ Agregar", key=f"add_{prod['id']}", use_container_width=True):
                                             carrito_actual = cliente_actual['carrito']
@@ -1047,7 +1039,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 else:
                     st.info("No se encontraron productos")
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Error general en búsqueda: {e}")
         else:
             st.info("Escribe algo para buscar productos")
     
@@ -1091,7 +1083,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                                 if st.session_state.online_mode:
                                     try:
                                         prod_resp = db.table("inventario").select("precio_detal, precio_mayor, min_mayor").eq("id", item['id']).execute()
-                                        if prod_resp.data:
+                                        if hasattr(prod_resp, 'data') and prod_resp.data:
                                             prod_data = prod_resp.data[0]
                                     except:
                                         pass
@@ -1235,10 +1227,10 @@ elif opcion == "🛒 PUNTO DE VENTA":
                             
                             if st.session_state.online_mode:
                                 try:
-                                    stock_actual = db.table("inventario").select("stock").eq("id", item['id']).execute().data[0]['stock']
-                                    db.table("inventario").update({
-                                        "stock": stock_actual - item['cantidad']
-                                    }).eq("id", item['id']).execute()
+                                    stock_actual = db.table("inventario").select("stock").eq("id", item['id']).execute()
+                                    if hasattr(stock_actual, 'data') and stock_actual.data:
+                                        stock_actual = stock_actual.data[0]['stock']
+                                        db.table("inventario").update({"stock": stock_actual - item['cantidad']}).eq("id", item['id']).execute()
                                 except:
                                     if 'operaciones_pendientes' not in st.session_state:
                                         st.session_state.operaciones_pendientes = []
