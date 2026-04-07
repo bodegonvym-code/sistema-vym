@@ -1326,7 +1326,8 @@ elif opcion == "🛒 PUNTO DE VENTA":
                         st.success(f"✅ Venta registrada - {cliente_actual['nombre']}{info_cliente}")
                         
                         # TICKET MEJORADO: COMPACTO Y CON SUBTOTAL EN Bs
-                        with st.expander("🧾 Ver Ticket", expanded=True):
+                                                with st.expander("🧾 Ver Ticket", expanded=True):
+                            # Generar filas del ticket
                             items_ticket = ""
                             for item in carrito:
                                 subtotal_usd = item['subtotal']
@@ -1338,11 +1339,11 @@ elif opcion == "🛒 PUNTO DE VENTA":
                                         <td style="padding: 4px 6px; text-align:right; white-space:nowrap;">${item['precio']:.2f}</td>
                                         <td style="padding: 4px 6px; text-align:right; white-space:nowrap;">${subtotal_usd:.2f}</td>
                                         <td style="padding: 4px 6px; text-align:right; white-space:nowrap;">{subtotal_bs:,.2f} Bs</td>
-                                    </tr>
+                                    <tr>
                                 """
                             
                             ticket_html = f"""
-                            <div style="background:white; padding:10px; border-radius:8px; border:1px solid #ccc; max-width:650px; margin:0 auto; font-family: 'Courier New', monospace; font-size: 12px;">
+                            <div style="background:white; padding:10px; border-radius:8px; border:1px solid #ccc; max-width:550px; margin:0 auto; font-family: 'Courier New', monospace; font-size: 12px;">
                                 <div style="text-align:center;">
                                     <strong>BODEGÓN VYM</strong><br>
                                     {datetime.now().strftime('%d/%m/%Y %H:%M')}<br>
@@ -1382,22 +1383,10 @@ elif opcion == "🛒 PUNTO DE VENTA":
                                 <p style="text-align:center; margin-top:10px;">¡Gracias por su compra!</p>
                             </div>
                             """
+                            # Mostrar el ticket
                             st.markdown(ticket_html, unsafe_allow_html=True)
-                        
-                        st.session_state.clientes[st.session_state.cliente_actual]['carrito'] = []
-                        st.session_state.clientes[st.session_state.cliente_actual]['cliente'] = ''
-                        
-                        if st.button("🔄 Cerrar y continuar"):
-                            st.rerun()
-                            
-                    except Exception as e:
-                        st.error(f"Error al procesar venta: {e}")
-            
-            with col_btn3:
-                if len(carrito) > 0:
-                    if st.button("⏸️ Dejar pendiente", use_container_width=True):
-                        st.session_state.cliente_actual = 'cliente_1'
-                        st.rerun()
+                            # Pequeña pausa para asegurar renderizado (opcional)
+                            time.sleep(0.1)
 
 # ============================================
 # MÓDULO 3: GASTOS
