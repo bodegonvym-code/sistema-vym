@@ -493,11 +493,11 @@ if opcion == "📦 INVENTARIO":
     st.markdown("<h1 class='main-header'>📦 Gestión de Inventario</h1>", unsafe_allow_html=True)
     
     # Categorías predefinidas
-    CATEGORIAS = [
-        "Licores", "Cervezas", "Vinos", "Refrescos", "Aguas",
-        "Víveres", "Confitería", "Snacks", "Lácteos", "Otros"
-    ]
-    
+    "VIVERES", "CONFITERIA", "CHARCUTERIA", "BEBIDAS", "LACTEOS",
+    "SNACK", "BISUTERIA", "PAPELERIA", "DETERGENTES", "ASEO PERSONAL",
+    "QUINCALLERIA", "OTROS"
+]
+        
     try:
         # Cargar datos (con soporte offline)
         if st.session_state.online_mode:
