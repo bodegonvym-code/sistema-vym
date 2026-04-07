@@ -1091,15 +1091,12 @@ elif opcion == "🛒 PUNTO DE VENTA":
             
             for idx, item in enumerate(carrito):
                 with st.container(border=True):
-                    # Usamos 3 columnas: información del producto, cantidad, eliminar
                     col1, col2, col3 = st.columns([3, 1, 0.5])
                     
                     with col1:
                         st.markdown(f"**{item['nombre']}**")
-                        # Precio unitario con tipo de precio
                         tipo = item.get('tipo_precio', '')
                         st.caption(f"Precio unitario: ${item['precio']:.2f}{tipo}")
-                        # Subtotal en USD y Bs
                         subtotal_usd = item['subtotal']
                         subtotal_bs = subtotal_usd * tasa
                         st.caption(f"Subtotal: ${subtotal_usd:.2f} USD | {subtotal_bs:,.2f} Bs")
@@ -1156,12 +1153,10 @@ elif opcion == "🛒 PUNTO DE VENTA":
                             st.session_state.clientes[st.session_state.cliente_actual]['carrito'].pop(idx)
                             st.rerun()
                     
-                    # Acumular totales
                     total_venta_usd += item['subtotal']
                     total_venta_bs += item['subtotal'] * tasa
                     total_costo += item['cantidad'] * item['costo']
             
-            # Mostrar totales generales
             st.divider()
             col_t1, col_t2 = st.columns(2)
             with col_t1:
@@ -1325,7 +1320,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                         st.balloons()
                         st.success(f"✅ Venta registrada - {cliente_actual['nombre']}{info_cliente}")
                         
-                        # TICKET MEJORADO Y CORREGIDO
+                        # TICKET MEJORADO Y CORREGIDO (sin errores de f-string)
                         with st.expander("🧾 Ver Ticket", expanded=True):
                             items_ticket = ""
                             for item in carrito:
@@ -1337,8 +1332,9 @@ elif opcion == "🛒 PUNTO DE VENTA":
                                         <td style="padding: 4px 6px; white-space:nowrap;">{item['nombre']}</td>
                                         <td style="padding: 4px 6px; text-align:right; white-space:nowrap;">${item['precio']:.2f}</td>
                                         <td style="padding: 4px 6px; text-align:right; white-space:nowrap;">${subtotal_usd:.2f}</td>
-                                        <td style="padding: 4px 6px; text-align:right; white-space:nowrap;">{subtotal_bs:,.2f} Bs}?
-                            """
+                                        <td style="padding: 4px 6px; text-align:right; white-space:nowrap;">{subtotal_bs:,.2f} Bs</td>
+                                    </tr>
+                                """
                             
                             ticket_html = f"""
                             <div style="background:white; padding:10px; border-radius:8px; border:1px solid #ccc; max-width:550px; margin:0 auto; font-family: 'Courier New', monospace; font-size: 12px;">
@@ -1371,8 +1367,14 @@ elif opcion == "🛒 PUNTO DE VENTA":
                                     </tr>
                                     <tr>
                                         <td style="text-align:right;"><strong>Total Bs:</strong></td>
-                                        <td style="text-align:right;">{total_final_bs:,.2f} Bs}?
-                                </div>
+                                        <td style="text-align:right;">{total_final_bs:,.2f} Bs</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="text-align:right;"><strong>Vuelto:</strong></td>
+                                        <td style="text-align:right;">${vuelto_usd:.2f} / {(vuelto_usd * tasa):,.2f} Bs</td>
+                                    </tr>
+                                </table>
+                                <p style="text-align:center; margin-top:10px;">¡Gracias por su compra!</p>
                             </div>
                             """
                             st.markdown(ticket_html, unsafe_allow_html=True)
