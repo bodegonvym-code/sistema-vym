@@ -492,7 +492,7 @@ def exportar_excel(df, nombre_archivo):
 if opcion == "📦 INVENTARIO":
     st.markdown("<h1 class='main-header'>📦 Gestión de Inventario</h1>", unsafe_allow_html=True)
     
-    # Categorías predefinidas
+     # Categorías predefinidas
     "VIVERES", "CONFITERIA", "CHARCUTERIA", "BEBIDAS", "LACTEOS",
     "SNACK", "BISUTERIA", "PAPELERIA", "DETERGENTES", "ASEO PERSONAL",
     "QUINCALLERIA", "OTROS"
