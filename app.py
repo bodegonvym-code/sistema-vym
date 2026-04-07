@@ -887,7 +887,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA CON SEPARACIÓN DE CLIENTES (CORREGIDO)
+# MÓDULO 2: PUNTO DE VENTA CON SEPARACIÓN DE CLIENTES (MEJORADO: CARRITO Y TICKET CON USD+Bs)
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -1077,7 +1077,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
         else:
             st.info("Escribe algo para buscar productos")
     
-    # COLUMNA DERECHA: CARRITO DEL CLIENTE ACTUAL
+    # COLUMNA DERECHA: CARRITO DEL CLIENTE ACTUAL (MEJORADO: MUESTRA USD Y Bs POR PRODUCTO)
     with col_carrito:
         st.subheader(f"🛒 Carrito - {cliente_actual['nombre']}")
         carrito = cliente_actual['carrito']
@@ -1085,17 +1085,24 @@ elif opcion == "🛒 PUNTO DE VENTA":
         if not carrito:
             st.info("Carrito vacío")
         else:
-            total_venta_usd = 0
-            total_costo = 0
+            total_venta_usd = 0.0
+            total_venta_bs = 0.0
+            total_costo = 0.0
             
             for idx, item in enumerate(carrito):
                 with st.container(border=True):
-                    col1, col2, col3, col4 = st.columns([2.5, 1, 1, 0.5])
+                    # Usamos 3 columnas: información del producto, cantidad, eliminar
+                    col1, col2, col3 = st.columns([3, 1, 0.5])
                     
                     with col1:
                         st.markdown(f"**{item['nombre']}**")
-                        if 'tipo_precio' in item:
-                            st.caption(f"Precio: ${item['precio']:.2f}{item['tipo_precio']}")
+                        # Precio unitario con tipo de precio
+                        tipo = item.get('tipo_precio', '')
+                        st.caption(f"Precio unitario: ${item['precio']:.2f}{tipo}")
+                        # Subtotal en USD y Bs
+                        subtotal_usd = item['subtotal']
+                        subtotal_bs = subtotal_usd * tasa
+                        st.caption(f"Subtotal: ${subtotal_usd:.2f} USD | {subtotal_bs:,.2f} Bs")
                     
                     with col2:
                         nueva_cant = st.number_input(
@@ -1145,24 +1152,22 @@ elif opcion == "🛒 PUNTO DE VENTA":
                                 st.rerun()
                     
                     with col3:
-                        st.markdown(f"**${item['subtotal']:.2f}**")
-                    
-                    with col4:
                         if st.button("❌", key=f"del_cliente_{idx}"):
                             st.session_state.clientes[st.session_state.cliente_actual]['carrito'].pop(idx)
                             st.rerun()
                     
+                    # Acumular totales
                     total_venta_usd += item['subtotal']
+                    total_venta_bs += item['subtotal'] * tasa
                     total_costo += item['cantidad'] * item['costo']
             
-            total_venta_bs = total_venta_usd * tasa
+            # Mostrar totales generales
             st.divider()
-            
             col_t1, col_t2 = st.columns(2)
             with col_t1:
-                st.markdown(f"### Total calculado USD: ${total_venta_usd:,.2f}")
+                st.markdown(f"### Total USD: ${total_venta_usd:,.2f}")
             with col_t2:
-                st.markdown(f"### Total calculado Bs: {total_venta_bs:,.2f}")
+                st.markdown(f"### Total Bs: {total_venta_bs:,.2f}")
             
             # AJUSTE MANUAL DEL MONTO (REDONDEO)
             total_final_usd = total_venta_usd
@@ -1320,56 +1325,64 @@ elif opcion == "🛒 PUNTO DE VENTA":
                         st.balloons()
                         st.success(f"✅ Venta registrada - {cliente_actual['nombre']}{info_cliente}")
                         
+                        # TICKET MEJORADO: COMPACTO Y CON SUBTOTAL EN Bs
                         with st.expander("🧾 Ver Ticket", expanded=True):
                             items_ticket = ""
                             for item in carrito:
+                                subtotal_usd = item['subtotal']
+                                subtotal_bs = subtotal_usd * tasa
                                 items_ticket += f"""
-                                    <tr>
-                                        <td style='padding: 4px 8px;'>{item['cantidad']:.0f}</td>
-                                        <td style='padding: 4px 8px;'>{item['nombre']}</td>
-                                        <td style='padding: 4px 8px; text-align: right;'>${item['precio']:.2f}</td>
-                                        <td style='padding: 4px 8px; text-align: right;'>${item['subtotal']:.2f}</td>
+                                    <tr style="border-bottom:1px solid #ddd;">
+                                        <td style="padding: 4px 6px; text-align:center; white-space:nowrap;">{item['cantidad']:.0f}</td>
+                                        <td style="padding: 4px 6px; white-space:nowrap;">{item['nombre']}</td>
+                                        <td style="padding: 4px 6px; text-align:right; white-space:nowrap;">${item['precio']:.2f}</td>
+                                        <td style="padding: 4px 6px; text-align:right; white-space:nowrap;">${subtotal_usd:.2f}</td>
+                                        <td style="padding: 4px 6px; text-align:right; white-space:nowrap;">{subtotal_bs:,.2f} Bs</td>
                                     </tr>
                                 """
                             
-                            st.markdown(f"""
-                            <div style="background:white; padding:20px; border-radius:10px; border:2px solid #1e3c72; max-width:800px; margin:0 auto;">
-                                <h3 style="text-align:center;">BODEGÓN VYM</h3>
-                                <p style="text-align:center;">{datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
-                                <p style="text-align:center;">Turno #{id_turno} | {cliente_actual['nombre']}{info_cliente}</p>
-                                <p style="text-align:center;">Cajero: {st.session_state.usuario_actual['nombre']}</p>
-                                <hr>
+                            ticket_html = f"""
+                            <div style="background:white; padding:10px; border-radius:8px; border:1px solid #ccc; max-width:650px; margin:0 auto; font-family: 'Courier New', monospace; font-size: 12px;">
+                                <div style="text-align:center;">
+                                    <strong>BODEGÓN VYM</strong><br>
+                                    {datetime.now().strftime('%d/%m/%Y %H:%M')}<br>
+                                    Turno #{id_turno} | {cliente_actual['nombre']}{info_cliente}<br>
+                                    Cajero: {st.session_state.usuario_actual['nombre']}
+                                </div>
+                                <hr style="margin:6px 0;">
                                 <table style="width:100%; border-collapse: collapse;">
                                     <thead>
-                                        <tr style="border-bottom:1px solid #ccc;">
-                                            <th style="text-align:left;">Cant</th>
+                                        <tr style="border-bottom:2px solid #000;">
+                                            <th style="text-align:center;">Cant</th>
                                             <th style="text-align:left;">Producto</th>
                                             <th style="text-align:right;">Precio</th>
-                                            <th style="text-align:right;">Subtotal</th>
+                                            <th style="text-align:right;">Sub USD</th>
+                                            <th style="text-align:right;">Sub Bs</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {items_ticket}
                                     </tbody>
                                 </table>
-                                <hr>
+                                <hr style="margin:6px 0;">
                                 <table style="width:100%;">
                                     <tr>
-                                        <td style="text-align:right;"><b>Total USD:</b></td>
+                                        <td style="text-align:right;"><strong>Total USD:</strong></td>
                                         <td style="text-align:right;">${total_final_usd:,.2f}</td>
                                     </tr>
                                     <tr>
-                                        <td style="text-align:right;"><b>Total Bs:</b></td>
+                                        <td style="text-align:right;"><strong>Total Bs:</strong></td>
                                         <td style="text-align:right;">{total_final_bs:,.2f} Bs</td>
                                     </tr>
                                     <tr>
-                                        <td style="text-align:right;"><b>Vuelto:</b></td>
+                                        <td style="text-align:right;"><strong>Vuelto:</strong></td>
                                         <td style="text-align:right;">${vuelto_usd:.2f} / {(vuelto_usd * tasa):,.2f} Bs</td>
                                     </tr>
                                 </table>
-                                <p style="text-align:center; margin-top:20px;">¡Gracias por su compra!</p>
+                                <p style="text-align:center; margin-top:10px;">¡Gracias por su compra!</p>
                             </div>
-                            """, unsafe_allow_html=True)
+                            """
+                            st.markdown(ticket_html, unsafe_allow_html=True)
                         
                         st.session_state.clientes[st.session_state.cliente_actual]['carrito'] = []
                         st.session_state.clientes[st.session_state.cliente_actual]['cliente'] = ''
