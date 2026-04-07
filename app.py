@@ -887,7 +887,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA CON SEPARACIÓN DE CLIENTES (MEJORADO: CARRITO Y TICKET CON USD+Bs)
+# MÓDULO 2: PUNTO DE VENTA CON SEPARACIÓN DE CLIENTES (CORREGIDO Y FUNCIONAL)
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -1322,9 +1322,10 @@ elif opcion == "🛒 PUNTO DE VENTA":
                                 'datos': venta_data
                             })
                         
-                                               st.balloons()
+                        st.balloons()
                         st.success(f"✅ Venta registrada - {cliente_actual['nombre']}{info_cliente}")
                         
+                        # TICKET MEJORADO Y CORREGIDO
                         with st.expander("🧾 Ver Ticket", expanded=True):
                             items_ticket = ""
                             for item in carrito:
@@ -1337,7 +1338,8 @@ elif opcion == "🛒 PUNTO DE VENTA":
                                         <td style="padding: 4px 6px; text-align:right; white-space:nowrap;">${item['precio']:.2f}</td>
                                         <td style="padding: 4px 6px; text-align:right; white-space:nowrap;">${subtotal_usd:.2f}</td>
                                         <td style="padding: 4px 6px; text-align:right; white-space:nowrap;">{subtotal_bs:,.2f} Bs}?
-
+                            """
+                            
                             ticket_html = f"""
                             <div style="background:white; padding:10px; border-radius:8px; border:1px solid #ccc; max-width:550px; margin:0 auto; font-family: 'Courier New', monospace; font-size: 12px;">
                                 <div style="text-align:center;">
@@ -1370,7 +1372,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
                                     <tr>
                                         <td style="text-align:right;"><strong>Total Bs:</strong></td>
                                         <td style="text-align:right;">{total_final_bs:,.2f} Bs}?
-
                                 </div>
                             </div>
                             """
@@ -1382,6 +1383,15 @@ elif opcion == "🛒 PUNTO DE VENTA":
                         
                         if st.button("🔄 Cerrar y continuar"):
                             st.rerun()
+                            
+                    except Exception as e:
+                        st.error(f"Error al procesar venta: {e}")
+            
+            with col_btn3:
+                if len(carrito) > 0:
+                    if st.button("⏸️ Dejar pendiente", use_container_width=True):
+                        st.session_state.cliente_actual = 'cliente_1'
+                        st.rerun()
 
 # ============================================
 # MÓDULO 3: GASTOS
