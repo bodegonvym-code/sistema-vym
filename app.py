@@ -487,16 +487,17 @@ def exportar_excel(df, nombre_archivo):
     return href
 
 # ============================================
-# MÓDULO 1: INVENTARIO MEJORADO (sin cambios)
+# MÓDULO 1: INVENTARIO MEJORADO (CORREGIDO)
 # ============================================
 if opcion == "📦 INVENTARIO":
     st.markdown("<h1 class='main-header'>📦 Gestión de Inventario</h1>", unsafe_allow_html=True)
     
-     # Categorías predefinidas
-    "VIVERES", "CONFITERIA", "CHARCUTERIA", "BEBIDAS", "LACTEOS",
-    "SNACK", "BISUTERIA", "PAPELERIA", "DETERGENTES", "ASEO PERSONAL",
-    "QUINCALLERIA", "OTROS"
-]
+    # Categorías predefinidas (ACTUALIZADAS)
+    CATEGORIAS = [
+        "VIVERES", "CONFITERIA", "CHARCUTERIA", "BEBIDAS", "LACTEOS",
+        "SNACK", "BISUTERIA", "PAPELERIA", "DETERGENTES", "ASEO PERSONAL",
+        "QUINCALLERIA", "OTROS"
+    ]
         
     try:
         # Cargar datos (con soporte offline)
@@ -511,7 +512,7 @@ if opcion == "📦 INVENTARIO":
         # Verificar si existe columna categoria, si no, agregarla
         if not df.empty:
             if 'categoria' not in df.columns:
-                df['categoria'] = 'Otros'
+                df['categoria'] = 'OTROS'
             if 'codigo_barras' not in df.columns:
                 df['codigo_barras'] = ''
         
@@ -602,8 +603,12 @@ if opcion == "📦 INVENTARIO":
                             col_e1, col_e2 = st.columns(2)
                             with col_e1:
                                 nuevo_nombre = st.text_input("Nombre", value=prod['nombre'])
+                                # Obtener índice de categoría, si no está en la nueva lista, usar "OTROS"
+                                categoria_actual = prod.get('categoria', 'OTROS')
+                                if categoria_actual not in CATEGORIAS:
+                                    categoria_actual = "OTROS"
                                 nueva_categoria = st.selectbox("Categoría", CATEGORIAS, 
-                                                              index=CATEGORIAS.index(prod.get('categoria', 'Otros')) if prod.get('categoria', 'Otros') in CATEGORIAS else 9)
+                                                              index=CATEGORIAS.index(categoria_actual) if categoria_actual in CATEGORIAS else 0)
                                 nuevo_stock = st.number_input("Stock", value=float(prod['stock']), min_value=0.0, step=1.0)
                                 nuevo_costo = st.number_input("Costo $", value=float(prod['costo']), min_value=0.0, step=0.01)
                                 nuevo_codigo = st.text_input("Código de barras", value=prod.get('codigo_barras', ''))
@@ -644,56 +649,6 @@ if opcion == "📦 INVENTARIO":
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"Error: {e}")
-                        
-                        # --- Códigos alternos (CORREGIDO) ---
-                        st.divider()
-                        st.subheader("🔗 Códigos de barras alternos")
-                        with st.container():
-                            # Mostrar códigos existentes
-                            if st.session_state.online_mode:
-                                # Convertir prod['id'] a int para evitar error de serialización
-                                alt_codes = db.table("codigos_alternos").select("*").eq("producto_id", int(prod['id'])).execute()
-                            else:
-                                # En modo offline no se manejan códigos alternos (se omite)
-                                alt_codes = type('obj', (object,), {'data': []})()
-                            
-                            if alt_codes.data:
-                                st.write("**Códigos actuales:**")
-                                for ac in alt_codes.data:
-                                    col1, col2 = st.columns([4, 1])
-                                    with col1:
-                                        st.code(ac["codigo"])
-                                    with col2:
-                                        if st.button("❌", key=f"del_{ac['id']}"):
-                                            if st.session_state.online_mode:
-                                                db.table("codigos_alternos").delete().eq("id", int(ac["id"])).execute()
-                                            st.success("Código eliminado")
-                                            time.sleep(1)
-                                            st.rerun()
-                            else:
-                                st.info("No hay códigos alternos para este producto.")
-                            
-                            # Agregar nuevo código
-                            nuevo_codigo_alt = st.text_input("Nuevo código de barras (opcional)", key=f"new_alt_{prod['id']}")
-                            if st.button("➕ Agregar código", key=f"add_alt_{prod['id']}"):
-                                if nuevo_codigo_alt.strip():
-                                    try:
-                                        if st.session_state.online_mode:
-                                            # Convertir prod['id'] a int aquí también
-                                            db.table("codigos_alternos").insert({
-                                                "producto_id": int(prod['id']),
-                                                "codigo": nuevo_codigo_alt.strip()
-                                            }).execute()
-                                        else:
-                                            st.warning("Modo offline: no se pueden agregar códigos alternos")
-                                        st.success("Código agregado correctamente")
-                                        time.sleep(1)
-                                        st.rerun()
-                                    except Exception as e:
-                                        st.error(f"Error: {e}")
-                                else:
-                                    st.warning("Escribe un código válido")
-                        # --- Fin código alternos ---
                 
                 # ELIMINAR PRODUCTO
                 st.divider()
