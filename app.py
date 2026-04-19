@@ -890,7 +890,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA (MEJORADO: AUTOSELECCIÓN, TABLAS, POPUP)
+# MÓDULO 2: PUNTO DE VENTA (REDISEÑADO: POPUP BÚSQUEDA, CARRITO EN TABLA)
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -966,104 +966,60 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 st.session_state.clientes[st.session_state.cliente_actual]['carrito'] = []
                 st.rerun()
     
-    # NUEVO LAYOUT: BÚSQUEDA (30%) y CARRITO (70%)
-    col_busqueda, col_carrito = st.columns([0.3, 0.7])
+    # BOTÓN PARA ABRIR EL POPUP DE BÚSQUEDA
+    if st.button("🔍 Buscar producto (código o nombre)", use_container_width=True):
+        st.session_state.mostrar_buscador = True
     
-    # ============================================
-    # COLUMNA IZQUIERDA: BÚSQUEDA INTELIGENTE (con autoselección)
-    # ============================================
-    with col_busqueda:
-        st.subheader("🔍 Buscar producto")
-        
-        # Campo de búsqueda con autoselección al presionar Enter
-        busqueda = st.text_input("", placeholder="Escribe o escanea código / nombre...", key="buscar_venta")
-        
-        # Función auxiliar para agregar un producto al carrito (usada tanto en autoselección como en botón)
-        def agregar_producto(prod):
-            carrito_actual = cliente_actual['carrito']
-            cantidad_existente = 0
-            for item in carrito_actual:
-                if item['id'] == prod['id']:
-                    cantidad_existente += item['cantidad']
+    # POPUP DEL BUSCADOR
+    if st.session_state.get('mostrar_buscador', False):
+        @st.dialog("🔍 Buscar producto")
+        def buscador_popup():
+            st.write("Escribe el nombre o escanea el código de barras:")
+            busqueda = st.text_input("", placeholder="Nombre o código...", key="buscar_popup")
             
-            nueva_cantidad = cantidad_existente + 1
-            precio_base = float(prod['precio_detal'])
-            if nueva_cantidad >= prod['min_mayor']:
-                precio_final = float(prod['precio_mayor'])
-                tipo_precio = " (Mayor)"
-            else:
-                precio_final = precio_base
-                tipo_precio = ""
-            
-            encontrado = False
-            for item in st.session_state.clientes[st.session_state.cliente_actual]['carrito']:
-                if item['id'] == prod['id']:
-                    item['cantidad'] += 1
-                    item['precio'] = precio_final
-                    item['subtotal'] = item['cantidad'] * item['precio']
-                    encontrado = True
-                    break
-            
-            if not encontrado:
-                st.session_state.clientes[st.session_state.cliente_actual]['carrito'].append({
-                    "id": prod['id'],
-                    "nombre": prod['nombre'],
-                    "cantidad": 1,
-                    "precio": precio_final,
-                    "costo": float(prod['costo']),
-                    "subtotal": precio_final,
-                    "tipo_precio": tipo_precio
-                })
-            st.rerun()
-        
-        # Autoselección: si el usuario presiona Enter, buscamos un producto que coincida exactamente con el texto
-        # (priorizando código de barras principal, luego código alterno, luego nombre exacto)
-        if busqueda and st.session_state.get('buscar_venta_autoselect', False):
-            # Este bloque se activa cuando se presiona Enter (usaremos un truco con on_change)
-            pass
-        
-        # Realizamos la búsqueda normalmente para mostrar resultados en tabla
-        if busqueda:
-            try:
+            if busqueda:
                 productos = []
                 if st.session_state.online_mode:
-                    # Búsqueda por nombre (coincidencia parcial)
-                    resp_nombre = db.table("inventario").select("*").ilike("nombre", f"%{busqueda}%").gt("stock", 0).execute()
-                    if hasattr(resp_nombre, 'data'):
-                        productos.extend(resp_nombre.data)
-                    
-                    # Búsqueda por código de barras principal (coincidencia parcial)
-                    resp_codigo = db.table("inventario").select("*").ilike("codigo_barras", f"%{busqueda}%").gt("stock", 0).execute()
-                    if hasattr(resp_codigo, 'data'):
-                        productos.extend(resp_codigo.data)
-                    
-                    # Búsqueda por código alterno (coincidencia exacta)
-                    resp_alternos = db.table("codigos_alternos").select("producto_id").eq("codigo", busqueda).execute()
-                    if hasattr(resp_alternos, 'data') and resp_alternos.data:
-                        ids_alternos = [item["producto_id"] for item in resp_alternos.data]
-                        resp_prod_alt = db.table("inventario").select("*").in_("id", ids_alternos).gt("stock", 0).execute()
-                        if hasattr(resp_prod_alt, 'data'):
-                            productos.extend(resp_prod_alt.data)
-                    
+                    # Búsqueda por nombre
+                    try:
+                        resp_nombre = db.table("inventario").select("*").ilike("nombre", f"%{busqueda}%").gt("stock", 0).execute()
+                        if hasattr(resp_nombre, 'data'):
+                            productos.extend(resp_nombre.data)
+                    except:
+                        pass
+                    # Búsqueda por código de barras principal
+                    try:
+                        resp_codigo = db.table("inventario").select("*").ilike("codigo_barras", f"%{busqueda}%").gt("stock", 0).execute()
+                        if hasattr(resp_codigo, 'data'):
+                            productos.extend(resp_codigo.data)
+                    except:
+                        pass
+                    # Búsqueda por código alterno (exacto)
+                    try:
+                        resp_alternos = db.table("codigos_alternos").select("producto_id").eq("codigo", busqueda).execute()
+                        if hasattr(resp_alternos, 'data') and resp_alternos.data:
+                            ids = [item["producto_id"] for item in resp_alternos.data]
+                            resp_prod_alt = db.table("inventario").select("*").in_("id", ids).gt("stock", 0).execute()
+                            if hasattr(resp_prod_alt, 'data'):
+                                productos.extend(resp_prod_alt.data)
+                    except:
+                        pass
                     # Eliminar duplicados
-                    productos_unicos = {}
-                    for prod in productos:
-                        productos_unicos[prod['id']] = prod
-                    productos = list(productos_unicos.values())
+                    unicos = {}
+                    for p in productos:
+                        unicos[p['id']] = p
+                    productos = list(unicos.values())
                     productos.sort(key=lambda x: x['nombre'])
-                    productos = productos[:20]
                 else:
-                    # Modo offline: solo buscar por nombre
+                    # Modo offline
                     datos_local = OfflineManager.obtener_datos_local('inventario')
                     if datos_local:
-                        df_local = pd.DataFrame(datos_local)
-                        df_local = df_local[df_local['stock'] > 0]
-                        df_local = df_local[df_local['nombre'].str.contains(busqueda, case=False, na=False)]
-                        productos = df_local.to_dict('records')
+                        df = pd.DataFrame(datos_local)
+                        df = df[df['stock'] > 0]
+                        df = df[df['nombre'].str.contains(busqueda, case=False, na=False)]
+                        productos = df.to_dict('records')
                 
                 if productos:
-                    # Mostrar resultados en tabla
-                    st.markdown("**Resultados:**")
                     for prod in productos:
                         precio_usd = float(prod['precio_detal'])
                         precio_bs = precio_usd * tasa
@@ -1073,229 +1029,246 @@ elif opcion == "🛒 PUNTO DE VENTA":
                                 st.write(f"**{prod['nombre']}**")
                                 st.caption(f"Stock: {prod['stock']:.0f} | ${precio_usd:.2f} USD | {precio_bs:,.2f} Bs")
                             with col2:
-                                if st.button("➕ Agregar", key=f"add_{prod['id']}", use_container_width=True):
-                                    agregar_producto(prod)
+                                if st.button("➕ Agregar", key=f"popup_add_{prod['id']}"):
+                                    # Agregar al carrito (acumulando si ya existe)
+                                    carrito_actual = st.session_state.clientes[st.session_state.cliente_actual]['carrito']
+                                    encontrado = False
+                                    for item in carrito_actual:
+                                        if item['id'] == prod['id']:
+                                            item['cantidad'] += 1
+                                            item['subtotal'] = item['cantidad'] * item['precio']
+                                            encontrado = True
+                                            break
+                                    if not encontrado:
+                                        # Determinar precio (si es mayorista o no)
+                                        precio_base = float(prod['precio_detal'])
+                                        if 1 >= prod['min_mayor']:
+                                            precio_final = float(prod['precio_mayor'])
+                                            tipo_precio = " (Mayor)"
+                                        else:
+                                            precio_final = precio_base
+                                            tipo_precio = ""
+                                        st.session_state.clientes[st.session_state.cliente_actual]['carrito'].append({
+                                            "id": prod['id'],
+                                            "nombre": prod['nombre'],
+                                            "cantidad": 1,
+                                            "precio": precio_final,
+                                            "costo": float(prod['costo']),
+                                            "subtotal": precio_final,
+                                            "tipo_precio": tipo_precio
+                                        })
+                                    st.rerun()
                 else:
                     st.info("No se encontraron productos")
-            except Exception as e:
-                st.error(f"Error en búsqueda: {e}")
-        else:
-            st.info("Escribe o escanea un código para buscar")
+            else:
+                st.info("Escribe o escanea un código")
+            
+            if st.button("Cerrar buscador"):
+                st.session_state.mostrar_buscador = False
+                st.rerun()
+        
+        buscador_popup()
     
     # ============================================
-    # COLUMNA DERECHA: CARRITO EN TABLA (70% de la pantalla)
+    # CARRITO EN TABLA (UNA LÍNEA POR PRODUCTO)
     # ============================================
-    with col_carrito:
-        st.subheader(f"🛒 Carrito - {cliente_actual['nombre']}")
-        carrito = cliente_actual['carrito']
+    st.subheader(f"🛒 Carrito - {cliente_actual['nombre']}")
+    carrito = cliente_actual['carrito']
+    
+    if not carrito:
+        st.info("Carrito vacío")
+    else:
+        # Construir DataFrame para mostrar en tabla
+        data = []
+        for idx, item in enumerate(carrito):
+            precio_usd = item['precio']
+            precio_bs = precio_usd * tasa
+            subtotal_usd = item['subtotal']
+            subtotal_bs = subtotal_usd * tasa
+            data.append({
+                "Producto": item['nombre'],
+                "Precio USD": f"{precio_usd:.2f}",
+                "Precio Bs": f"{precio_bs:,.2f}",
+                "Cantidad": item['cantidad'],
+                "Subtotal USD": f"{subtotal_usd:.2f}",
+                "Subtotal Bs": f"{subtotal_bs:,.2f}",
+                "_idx": idx  # para identificar el producto
+            })
         
-        if not carrito:
-            st.info("Carrito vacío")
-        else:
-            # Construir tabla con los productos del carrito
-            data = []
-            for idx, item in enumerate(carrito):
-                precio_usd = item['precio']
-                precio_bs = precio_usd * tasa
-                subtotal_usd = item['subtotal']
-                subtotal_bs = subtotal_usd * tasa
-                data.append({
-                    "Producto": item['nombre'],
-                    "Precio USD": f"${precio_usd:.2f}",
-                    "Precio Bs": f"{precio_bs:,.2f}",
-                    "Cantidad": item['cantidad'],
-                    "Subtotal USD": f"${subtotal_usd:.2f}",
-                    "Subtotal Bs": f"{subtotal_bs:,.2f}",
-                    "Eliminar": idx
-                })
-            
-            # Mostrar tabla interactiva con st.data_editor (para permitir edición de cantidades)
-            # Usamos st.data_editor para que el usuario pueda cambiar la cantidad directamente
-            df_carrito = pd.DataFrame(data)
-            # Eliminamos la columna "Eliminar" para la edición, la manejamos aparte
-            columnas_mostrar = ["Producto", "Precio USD", "Precio Bs", "Cantidad", "Subtotal USD", "Subtotal Bs"]
-            edited_df = st.data_editor(
-                df_carrito[columnas_mostrar],
-                use_container_width=True,
-                hide_index=True,
-                disabled=["Producto", "Precio USD", "Precio Bs", "Subtotal USD", "Subtotal Bs"],
-                column_config={
-                    "Cantidad": st.column_config.NumberColumn("Cantidad", min_value=0, step=1)
-                },
-                key="carrito_editor"
+        df = pd.DataFrame(data)
+        # Usar st.data_editor para permitir edición de cantidades
+        edited_df = st.data_editor(
+            df.drop(columns=['_idx']),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Cantidad": st.column_config.NumberColumn("Cantidad", min_value=0, step=1),
+            },
+            disabled=["Producto", "Precio USD", "Precio Bs", "Subtotal USD", "Subtotal Bs"],
+            key="carrito_editor"
+        )
+        
+        # Detectar cambios en cantidades
+        for i, row in edited_df.iterrows():
+            nueva_cant = row["Cantidad"]
+            if nueva_cant != carrito[i]['cantidad']:
+                if nueva_cant == 0:
+                    # Eliminar producto
+                    st.session_state.clientes[st.session_state.cliente_actual]['carrito'].pop(i)
+                    st.rerun()
+                else:
+                    # Recalcular precio según nueva cantidad (mayorista)
+                    prod_data = None
+                    if st.session_state.online_mode:
+                        try:
+                            prod_resp = db.table("inventario").select("precio_detal, precio_mayor, min_mayor").eq("id", carrito[i]['id']).execute()
+                            if hasattr(prod_resp, 'data') and prod_resp.data:
+                                prod_data = prod_resp.data[0]
+                        except:
+                            pass
+                    if not prod_data:
+                        inventario_local = OfflineManager.obtener_datos_local('inventario')
+                        if inventario_local:
+                            for p in inventario_local:
+                                if p['id'] == carrito[i]['id']:
+                                    prod_data = p
+                                    break
+                    if prod_data:
+                        if nueva_cant >= prod_data['min_mayor']:
+                            nuevo_precio = float(prod_data['precio_mayor'])
+                            tipo_precio = " (Mayor)"
+                        else:
+                            nuevo_precio = float(prod_data['precio_detal'])
+                            tipo_precio = ""
+                        carrito[i]['precio'] = nuevo_precio
+                        carrito[i]['tipo_precio'] = tipo_precio
+                    carrito[i]['cantidad'] = nueva_cant
+                    carrito[i]['subtotal'] = carrito[i]['cantidad'] * carrito[i]['precio']
+                    st.rerun()
+        
+        # Botones de eliminar individuales (por si se prefiere en lugar de poner 0)
+        st.write("**Eliminar productos:**")
+        cols_eliminar = st.columns(len(carrito))
+        for i, item in enumerate(carrito):
+            with cols_eliminar[i]:
+                if st.button(f"❌ {item['nombre']}", key=f"del_{i}"):
+                    st.session_state.clientes[st.session_state.cliente_actual]['carrito'].pop(i)
+                    st.rerun()
+        
+        # Cálculo de totales
+        total_venta_usd = sum(item['subtotal'] for item in carrito)
+        total_venta_bs = total_venta_usd * tasa
+        total_costo = sum(item['cantidad'] * item['costo'] for item in carrito)
+        
+        st.divider()
+        col_t1, col_t2 = st.columns(2)
+        with col_t1:
+            st.markdown(f"### Total USD: ${total_venta_usd:,.2f}")
+        with col_t2:
+            st.markdown(f"### Total Bs: {total_venta_bs:,.2f}")
+        
+        # AJUSTE MANUAL DEL MONTO (REDONDEO)
+        total_final_usd = total_venta_usd
+        total_final_bs = total_venta_bs
+        
+        with st.expander("🔧 Ajustar monto final (redondeo)", expanded=False):
+            st.markdown("Si deseas redondear el total a cobrar, selecciona una opción e ingresa el monto:")
+            opcion_ajuste = st.radio(
+                "Ajustar en:",
+                ["No ajustar (usar calculado)", "Bolívares (Bs)", "Dólares (USD)"],
+                horizontal=True,
+                key="opcion_ajuste"
             )
             
-            # Verificar si cambió alguna cantidad
-            for idx, row in edited_df.iterrows():
-                nueva_cant = row["Cantidad"]
-                if nueva_cant != carrito[idx]['cantidad']:
-                    if nueva_cant == 0:
-                        st.session_state.clientes[st.session_state.cliente_actual]['carrito'].pop(idx)
-                        st.rerun()
-                    else:
-                        # Recalcular precio según nueva cantidad (mayorista)
-                        prod_data = None
+            if opcion_ajuste == "Bolívares (Bs)":
+                monto_ajustado_bs = st.number_input(
+                    "Monto final en Bs",
+                    min_value=0.0,
+                    value=float(total_venta_bs),
+                    step=10.0,
+                    format="%.2f",
+                    key="monto_ajustado_bs"
+                )
+                total_final_bs = monto_ajustado_bs
+                total_final_usd = monto_ajustado_bs / tasa if tasa > 0 else 0
+                st.info(f"Equivalente en USD: ${total_final_usd:,.2f}")
+            elif opcion_ajuste == "Dólares (USD)":
+                monto_ajustado_usd = st.number_input(
+                    "Monto final en USD",
+                    min_value=0.0,
+                    value=float(total_venta_usd),
+                    step=1.0,
+                    format="%.2f",
+                    key="monto_ajustado_usd"
+                )
+                total_final_usd = monto_ajustado_usd
+                total_final_bs = monto_ajustado_usd * tasa
+                st.info(f"Equivalente en Bs: {total_final_bs:,.2f} Bs")
+        
+        st.divider()
+        
+        # SECCIÓN DE PAGOS (IDÉNTICA)
+        with st.expander("💳 Detalle de pagos", expanded=True):
+            st.markdown("**Ingresa los montos recibidos:**")
+            col_p1, col_p2 = st.columns(2)
+            with col_p1:
+                st.markdown("**💵 Pagos en USD**")
+                pago_usd_efectivo = st.number_input("Efectivo USD", min_value=0.0, step=5.0, format="%.2f", key="p_usd_efectivo")
+                pago_zelle = st.number_input("Zelle USD", min_value=0.0, step=5.0, format="%.2f", key="p_zelle")
+                pago_otros_usd = st.number_input("Otros USD (Binance/Transfer)", min_value=0.0, step=5.0, format="%.2f", key="p_otros_usd")
+            with col_p2:
+                st.markdown("**💵 Pagos en Bs**")
+                pago_bs_efectivo = st.number_input("Efectivo Bs", min_value=0.0, step=100.0, format="%.2f", key="p_bs_efectivo")
+                pago_movil = st.number_input("Pago Móvil Bs", min_value=0.0, step=100.0, format="%.2f", key="p_movil")
+                pago_punto = st.number_input("Punto de Venta Bs", min_value=0.0, step=100.0, format="%.2f", key="p_punto")
+            
+            total_usd_recibido = pago_usd_efectivo + pago_zelle + pago_otros_usd
+            total_bs_recibido = pago_bs_efectivo + pago_movil + pago_punto
+            total_usd_equivalente = total_usd_recibido + (total_bs_recibido / tasa if tasa > 0 else 0)
+            esperado_usd = total_final_bs / tasa if tasa > 0 else 0
+            vuelto_usd = total_usd_equivalente - esperado_usd
+            
+            st.divider()
+            col_r1, col_r2, col_r3 = st.columns(3)
+            with col_r1:
+                st.metric("Pagado USD eq.", f"${total_usd_equivalente:,.2f}")
+            with col_r2:
+                st.metric("Esperado USD", f"${esperado_usd:,.2f}")
+            with col_r3:
+                if vuelto_usd >= 0:
+                    st.metric("Vuelto USD", f"${vuelto_usd:,.2f}")
+                else:
+                    st.metric("Faltante USD", f"${abs(vuelto_usd):,.2f}", delta_color="inverse")
+            
+            if vuelto_usd >= -0.01:
+                st.success(f"✅ Pago suficiente. Vuelto: ${vuelto_usd:.2f} / {(vuelto_usd * tasa):,.2f} Bs")
+            else:
+                st.error(f"❌ Faltante: ${abs(vuelto_usd):,.2f} / {(abs(vuelto_usd) * tasa):,.2f} Bs")
+        
+        # BOTONES DE ACCIÓN
+        col_btn1, col_btn2, col_btn3 = st.columns(3)
+        
+        with col_btn1:
+            if st.button("🔄 Limpiar carrito", use_container_width=True):
+                st.session_state.clientes[st.session_state.cliente_actual]['carrito'] = []
+                st.rerun()
+        
+        with col_btn2:
+            venta_valida = vuelto_usd >= -0.01 and len(carrito) > 0
+            
+            if st.button("✅ Cobrar y cerrar cuenta", type="primary", use_container_width=True, disabled=not venta_valida):
+                try:
+                    items_resumen = []
+                    for item in carrito:
+                        items_resumen.append(f"{item['cantidad']:.0f}x {item['nombre']}")
+                        
                         if st.session_state.online_mode:
                             try:
-                                prod_resp = db.table("inventario").select("precio_detal, precio_mayor, min_mayor").eq("id", carrito[idx]['id']).execute()
-                                if hasattr(prod_resp, 'data') and prod_resp.data:
-                                    prod_data = prod_resp.data[0]
+                                stock_actual = db.table("inventario").select("stock").eq("id", item['id']).execute()
+                                if hasattr(stock_actual, 'data') and stock_actual.data:
+                                    stock_actual = stock_actual.data[0]['stock']
+                                    db.table("inventario").update({"stock": stock_actual - item['cantidad']}).eq("id", item['id']).execute()
                             except:
-                                pass
-                        if not prod_data:
-                            inventario_local = OfflineManager.obtener_datos_local('inventario')
-                            if inventario_local:
-                                for p in inventario_local:
-                                    if p['id'] == carrito[idx]['id']:
-                                        prod_data = p
-                                        break
-                        
-                        if prod_data:
-                            if nueva_cant >= prod_data['min_mayor']:
-                                nuevo_precio = float(prod_data['precio_mayor'])
-                                tipo_precio = " (Mayor)"
-                            else:
-                                nuevo_precio = float(prod_data['precio_detal'])
-                                tipo_precio = ""
-                            carrito[idx]['precio'] = nuevo_precio
-                            carrito[idx]['tipo_precio'] = tipo_precio
-                        
-                        carrito[idx]['cantidad'] = nueva_cant
-                        carrito[idx]['subtotal'] = carrito[idx]['cantidad'] * carrito[idx]['precio']
-                        st.rerun()
-            
-            # Botones de eliminar individual (ya no es necesario, pero los dejamos como columna aparte)
-            # Podemos agregar una columna con botones de eliminar
-            st.write("")  # espacio
-            col_eliminar = st.columns(len(carrito))
-            for idx, item in enumerate(carrito):
-                with col_eliminar[idx]:
-                    if st.button(f"❌ {item['nombre']}", key=f"del_{idx}"):
-                        st.session_state.clientes[st.session_state.cliente_actual]['carrito'].pop(idx)
-                        st.rerun()
-            
-            # Cálculo de totales
-            total_venta_usd = sum(item['subtotal'] for item in carrito)
-            total_venta_bs = total_venta_usd * tasa
-            total_costo = sum(item['cantidad'] * item['costo'] for item in carrito)
-            
-            st.divider()
-            col_t1, col_t2 = st.columns(2)
-            with col_t1:
-                st.markdown(f"### Total USD: ${total_venta_usd:,.2f}")
-            with col_t2:
-                st.markdown(f"### Total Bs: {total_venta_bs:,.2f}")
-            
-            # AJUSTE MANUAL DEL MONTO (REDONDEO) - IDÉNTICO AL ORIGINAL
-            total_final_usd = total_venta_usd
-            total_final_bs = total_venta_bs
-            
-            with st.expander("🔧 Ajustar monto final (redondeo)", expanded=False):
-                st.markdown("Si deseas redondear el total a cobrar, selecciona una opción e ingresa el monto:")
-                opcion_ajuste = st.radio(
-                    "Ajustar en:",
-                    ["No ajustar (usar calculado)", "Bolívares (Bs)", "Dólares (USD)"],
-                    horizontal=True,
-                    key="opcion_ajuste"
-                )
-                
-                if opcion_ajuste == "Bolívares (Bs)":
-                    monto_ajustado_bs = st.number_input(
-                        "Monto final en Bs",
-                        min_value=0.0,
-                        value=float(total_venta_bs),
-                        step=10.0,
-                        format="%.2f",
-                        key="monto_ajustado_bs"
-                    )
-                    total_final_bs = monto_ajustado_bs
-                    total_final_usd = monto_ajustado_bs / tasa if tasa > 0 else 0
-                    st.info(f"Equivalente en USD: ${total_final_usd:,.2f}")
-                elif opcion_ajuste == "Dólares (USD)":
-                    monto_ajustado_usd = st.number_input(
-                        "Monto final en USD",
-                        min_value=0.0,
-                        value=float(total_venta_usd),
-                        step=1.0,
-                        format="%.2f",
-                        key="monto_ajustado_usd"
-                    )
-                    total_final_usd = monto_ajustado_usd
-                    total_final_bs = monto_ajustado_usd * tasa
-                    st.info(f"Equivalente en Bs: {total_final_bs:,.2f} Bs")
-            
-            st.divider()
-            
-            # SECCIÓN DE PAGOS - IDÉNTICA A LA ORIGINAL
-            with st.expander("💳 Detalle de pagos", expanded=True):
-                st.markdown("**Ingresa los montos recibidos:**")
-                col_p1, col_p2 = st.columns(2)
-                with col_p1:
-                    st.markdown("**💵 Pagos en USD**")
-                    pago_usd_efectivo = st.number_input("Efectivo USD", min_value=0.0, step=5.0, format="%.2f", key="p_usd_efectivo")
-                    pago_zelle = st.number_input("Zelle USD", min_value=0.0, step=5.0, format="%.2f", key="p_zelle")
-                    pago_otros_usd = st.number_input("Otros USD (Binance/Transfer)", min_value=0.0, step=5.0, format="%.2f", key="p_otros_usd")
-                with col_p2:
-                    st.markdown("**💵 Pagos en Bs**")
-                    pago_bs_efectivo = st.number_input("Efectivo Bs", min_value=0.0, step=100.0, format="%.2f", key="p_bs_efectivo")
-                    pago_movil = st.number_input("Pago Móvil Bs", min_value=0.0, step=100.0, format="%.2f", key="p_movil")
-                    pago_punto = st.number_input("Punto de Venta Bs", min_value=0.0, step=100.0, format="%.2f", key="p_punto")
-                
-                total_usd_recibido = pago_usd_efectivo + pago_zelle + pago_otros_usd
-                total_bs_recibido = pago_bs_efectivo + pago_movil + pago_punto
-                total_usd_equivalente = total_usd_recibido + (total_bs_recibido / tasa if tasa > 0 else 0)
-                esperado_usd = total_final_bs / tasa if tasa > 0 else 0
-                vuelto_usd = total_usd_equivalente - esperado_usd
-                
-                st.divider()
-                col_r1, col_r2, col_r3 = st.columns(3)
-                with col_r1:
-                    st.metric("Pagado USD eq.", f"${total_usd_equivalente:,.2f}")
-                with col_r2:
-                    st.metric("Esperado USD", f"${esperado_usd:,.2f}")
-                with col_r3:
-                    if vuelto_usd >= 0:
-                        st.metric("Vuelto USD", f"${vuelto_usd:,.2f}")
-                    else:
-                        st.metric("Faltante USD", f"${abs(vuelto_usd):,.2f}", delta_color="inverse")
-                
-                if vuelto_usd >= -0.01:
-                    st.success(f"✅ Pago suficiente. Vuelto: ${vuelto_usd:.2f} / {(vuelto_usd * tasa):,.2f} Bs")
-                else:
-                    st.error(f"❌ Faltante: ${abs(vuelto_usd):,.2f} / {(abs(vuelto_usd) * tasa):,.2f} Bs")
-            
-            # BOTONES DE ACCIÓN - IDÉNTICOS A LOS ORIGINALES
-            col_btn1, col_btn2, col_btn3 = st.columns(3)
-            
-            with col_btn1:
-                if st.button("🔄 Limpiar carrito", use_container_width=True):
-                    st.session_state.clientes[st.session_state.cliente_actual]['carrito'] = []
-                    st.rerun()
-            
-            with col_btn2:
-                venta_valida = vuelto_usd >= -0.01 and len(carrito) > 0
-                
-                if st.button("✅ Cobrar y cerrar cuenta", type="primary", use_container_width=True, disabled=not venta_valida):
-                    try:
-                        items_resumen = []
-                        for item in carrito:
-                            items_resumen.append(f"{item['cantidad']:.0f}x {item['nombre']}")
-                            
-                            if st.session_state.online_mode:
-                                try:
-                                    stock_actual = db.table("inventario").select("stock").eq("id", item['id']).execute()
-                                    if hasattr(stock_actual, 'data') and stock_actual.data:
-                                        stock_actual = stock_actual.data[0]['stock']
-                                        db.table("inventario").update({"stock": stock_actual - item['cantidad']}).eq("id", item['id']).execute()
-                                except:
-                                    if 'operaciones_pendientes' not in st.session_state:
-                                        st.session_state.operaciones_pendientes = []
-                                    st.session_state.operaciones_pendientes.append({
-                                        'tipo': 'update_stock',
-                                        'id_producto': item['id'],
-                                        'cantidad': item['cantidad']
-                                    })
-                            else:
                                 if 'operaciones_pendientes' not in st.session_state:
                                     st.session_state.operaciones_pendientes = []
                                 st.session_state.operaciones_pendientes.append({
@@ -1303,98 +1276,102 @@ elif opcion == "🛒 PUNTO DE VENTA":
                                     'id_producto': item['id'],
                                     'cantidad': item['cantidad']
                                 })
-                        
-                        info_cliente = cliente_actual.get('cliente', '')
-                        if info_cliente:
-                            info_cliente = f" - Cliente: {info_cliente}"
-                        
-                        venta_data = {
-                            "id_cierre": id_turno,
-                            "producto": ", ".join(items_resumen),
-                            "cantidad": len(carrito),
-                            "total_usd": round(total_final_usd, 2),
-                            "monto_cobrado_bs": round(total_final_bs, 2),
-                            "tasa_cambio": tasa,
-                            "pago_divisas": round(pago_usd_efectivo, 2),
-                            "pago_zelle": round(pago_zelle, 2),
-                            "pago_otros": round(pago_otros_usd, 2),
-                            "pago_efectivo": round(pago_bs_efectivo, 2),
-                            "pago_movil": round(pago_movil, 2),
-                            "pago_punto": round(pago_punto, 2),
-                            "costo_venta": round(total_costo, 2),
-                            "estado": "Finalizado",
-                            "items": json.dumps(carrito),
-                            "id_transaccion": str(int(datetime.now().timestamp())),
-                            "fecha": datetime.now().isoformat(),
-                            "cliente": cliente_actual.get('cliente', '') or f"{cliente_actual['nombre']}"
-                        }
-                        
-                        if st.session_state.online_mode:
-                            db.table("ventas").insert(venta_data).execute()
                         else:
                             if 'operaciones_pendientes' not in st.session_state:
                                 st.session_state.operaciones_pendientes = []
                             st.session_state.operaciones_pendientes.append({
-                                'tipo': 'insert_venta',
-                                'datos': venta_data
+                                'tipo': 'update_stock',
+                                'id_producto': item['id'],
+                                'cantidad': item['cantidad']
                             })
+                    
+                    info_cliente = cliente_actual.get('cliente', '')
+                    if info_cliente:
+                        info_cliente = f" - Cliente: {info_cliente}"
+                    
+                    venta_data = {
+                        "id_cierre": id_turno,
+                        "producto": ", ".join(items_resumen),
+                        "cantidad": len(carrito),
+                        "total_usd": round(total_final_usd, 2),
+                        "monto_cobrado_bs": round(total_final_bs, 2),
+                        "tasa_cambio": tasa,
+                        "pago_divisas": round(pago_usd_efectivo, 2),
+                        "pago_zelle": round(pago_zelle, 2),
+                        "pago_otros": round(pago_otros_usd, 2),
+                        "pago_efectivo": round(pago_bs_efectivo, 2),
+                        "pago_movil": round(pago_movil, 2),
+                        "pago_punto": round(pago_punto, 2),
+                        "costo_venta": round(total_costo, 2),
+                        "estado": "Finalizado",
+                        "items": json.dumps(carrito),
+                        "id_transaccion": str(int(datetime.now().timestamp())),
+                        "fecha": datetime.now().isoformat(),
+                        "cliente": cliente_actual.get('cliente', '') or f"{cliente_actual['nombre']}"
+                    }
+                    
+                    if st.session_state.online_mode:
+                        db.table("ventas").insert(venta_data).execute()
+                    else:
+                        if 'operaciones_pendientes' not in st.session_state:
+                            st.session_state.operaciones_pendientes = []
+                        st.session_state.operaciones_pendientes.append({
+                            'tipo': 'insert_venta',
+                            'datos': venta_data
+                        })
+                    
+                    st.balloons()
+                    st.success(f"✅ Venta registrada - {cliente_actual['nombre']}{info_cliente}")
+                    
+                    # POPUP DEL TICKET
+                    @st.dialog("🧾 Ticket de Venta")
+                    def mostrar_ticket():
+                        st.markdown("### BODEGÓN VYM")
+                        st.write(f"**Fecha:** {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+                        st.write(f"**Turno:** #{id_turno} | **Cliente:** {cliente_actual['nombre']}{info_cliente}")
+                        st.write(f"**Cajero:** {st.session_state.usuario_actual['nombre']}")
+                        st.divider()
                         
-                        st.balloons()
-                        st.success(f"✅ Venta registrada - {cliente_actual['nombre']}{info_cliente}")
+                        ticket_data = []
+                        for item in carrito:
+                            subtotal_usd = item['subtotal']
+                            subtotal_bs = subtotal_usd * tasa
+                            ticket_data.append({
+                                "Cant": f"{item['cantidad']:.0f}",
+                                "Producto": item['nombre'],
+                                "Precio USD": f"${item['precio']:.2f}",
+                                "Subtotal USD": f"${subtotal_usd:.2f}",
+                                "Subtotal Bs": f"{subtotal_bs:,.2f}"
+                            })
+                        df_ticket = pd.DataFrame(ticket_data)
+                        st.dataframe(df_ticket, use_container_width=True, hide_index=True)
                         
-                        # TICKET EN VENTANA EMERGENTE (POPUP)
-                        @st.dialog("🧾 Ticket de Venta")
-                        def mostrar_ticket():
-                            st.markdown("### BODEGÓN VYM")
-                            st.write(f"**Fecha:** {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-                            st.write(f"**Turno:** #{id_turno} | **Cliente:** {cliente_actual['nombre']}{info_cliente}")
-                            st.write(f"**Cajero:** {st.session_state.usuario_actual['nombre']}")
-                            st.divider()
-                            
-                            # Tabla del ticket
-                            ticket_data = []
-                            for item in carrito:
-                                subtotal_usd = item['subtotal']
-                                subtotal_bs = subtotal_usd * tasa
-                                ticket_data.append({
-                                    "Cant": f"{item['cantidad']:.0f}",
-                                    "Producto": item['nombre'],
-                                    "Precio USD": f"${item['precio']:.2f}",
-                                    "Subtotal USD": f"${subtotal_usd:.2f}",
-                                    "Subtotal Bs": f"{subtotal_bs:,.2f}"
-                                })
-                            df_ticket = pd.DataFrame(ticket_data)
-                            st.dataframe(df_ticket, use_container_width=True, hide_index=True)
-                            
-                            st.divider()
-                            col_tot1, col_tot2 = st.columns(2)
-                            with col_tot1:
-                                st.metric("Total USD", f"${total_final_usd:,.2f}")
-                            with col_tot2:
-                                st.metric("Total Bs", f"{total_final_bs:,.2f} Bs")
-                            st.metric("Vuelto", f"${vuelto_usd:.2f} USD / {(vuelto_usd * tasa):,.2f} Bs")
-                            st.divider()
-                            st.markdown("¡Gracias por su compra!")
-                            
-                            if st.button("Cerrar ticket", use_container_width=True):
-                                st.rerun()
+                        st.divider()
+                        col_tot1, col_tot2 = st.columns(2)
+                        with col_tot1:
+                            st.metric("Total USD", f"${total_final_usd:,.2f}")
+                        with col_tot2:
+                            st.metric("Total Bs", f"{total_final_bs:,.2f} Bs")
+                        st.metric("Vuelto", f"${vuelto_usd:.2f} USD / {(vuelto_usd * tasa):,.2f} Bs")
+                        st.divider()
+                        st.markdown("¡Gracias por su compra!")
                         
-                        mostrar_ticket()
-                        
-                        st.session_state.clientes[st.session_state.cliente_actual]['carrito'] = []
-                        st.session_state.clientes[st.session_state.cliente_actual]['cliente'] = ''
-                        
-                        # No necesitamos el botón "Cerrar y continuar" porque el popup ya tiene su propio cierre
-                        # y al cerrar el popup se recarga la app, mostrando el carrito vacío.
-                        
-                    except Exception as e:
-                        st.error(f"Error al procesar venta: {e}")
-            
-            with col_btn3:
-                if len(carrito) > 0:
-                    if st.button("⏸️ Dejar pendiente", use_container_width=True):
-                        st.session_state.cliente_actual = 'cliente_1'
-                        st.rerun()
+                        if st.button("Cerrar ticket", use_container_width=True):
+                            st.rerun()
+                    
+                    mostrar_ticket()
+                    
+                    st.session_state.clientes[st.session_state.cliente_actual]['carrito'] = []
+                    st.session_state.clientes[st.session_state.cliente_actual]['cliente'] = ''
+                    
+                except Exception as e:
+                    st.error(f"Error al procesar venta: {e}")
+        
+        with col_btn3:
+            if len(carrito) > 0:
+                if st.button("⏸️ Dejar pendiente", use_container_width=True):
+                    st.session_state.cliente_actual = 'cliente_1'
+                    st.rerun()
 
 # ============================================
 # MÓDULO 3: GASTOS
