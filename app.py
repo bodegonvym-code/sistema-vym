@@ -1066,7 +1066,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
         buscador_popup()
     
     # ============================================
-    # CARRITO EN LISTA COMPACTA (una línea por producto)
+    # CARRITO EN LISTA COMPACTA (sin formulario, para evitar error)
     # ============================================
     st.subheader(f"🛒 Carrito - {cliente_actual['nombre']}")
     carrito = cliente_actual['carrito']
@@ -1074,70 +1074,63 @@ elif opcion == "🛒 PUNTO DE VENTA":
     if not carrito:
         st.info("Carrito vacío")
     else:
-        # Usamos un formulario para manejar la edición de cantidades sin recargar toda la página
-        with st.form(key="carrito_form", clear_on_submit=False):
-            # Mostrar cada producto en una fila con columnas
-            for idx, item in enumerate(carrito):
-                col1, col2, col3, col4, col5 = st.columns([3, 1.2, 1.2, 1, 0.5])
-                with col1:
-                    st.write(f"**{item['nombre']}**")
-                with col2:
-                    precio_usd = item['precio']
-                    st.write(f"${precio_usd:.2f}")
-                with col3:
-                    precio_bs = precio_usd * tasa
-                    st.write(f"{precio_bs:,.2f} Bs")
-                with col4:
-                    nueva_cant = st.number_input(
-                        "Cant.",
-                        min_value=0.0,
-                        max_value=1000.0,
-                        value=float(item['cantidad']),
-                        step=1.0,
-                        key=f"cant_{idx}",
-                        label_visibility="collapsed"
-                    )
-                    if nueva_cant != item['cantidad']:
-                        if nueva_cant == 0:
-                            st.session_state.clientes[st.session_state.cliente_actual]['carrito'].pop(idx)
-                            st.rerun()
-                        else:
-                            # Recalcular precio según nueva cantidad (mayorista)
-                            prod_data = None
-                            if st.session_state.online_mode:
-                                try:
-                                    prod_resp = db.table("inventario").select("precio_detal, precio_mayor, min_mayor").eq("id", item['id']).execute()
-                                    if hasattr(prod_resp, 'data') and prod_resp.data:
-                                        prod_data = prod_resp.data[0]
-                                except:
-                                    pass
-                            if not prod_data:
-                                inventario_local = OfflineManager.obtener_datos_local('inventario')
-                                if inventario_local:
-                                    for p in inventario_local:
-                                        if p['id'] == item['id']:
-                                            prod_data = p
-                                            break
-                            if prod_data:
-                                if nueva_cant >= prod_data['min_mayor']:
-                                    nuevo_precio = float(prod_data['precio_mayor'])
-                                    tipo_precio = " (Mayor)"
-                                else:
-                                    nuevo_precio = float(prod_data['precio_detal'])
-                                    tipo_precio = ""
-                                item['precio'] = nuevo_precio
-                                item['tipo_precio'] = tipo_precio
-                            item['cantidad'] = nueva_cant
-                            item['subtotal'] = item['cantidad'] * item['precio']
-                            st.rerun()
-                with col5:
-                    if st.button("❌", key=f"del_{idx}"):
+        # Mostrar cada producto en una fila con columnas
+        for idx, item in enumerate(carrito):
+            cols = st.columns([3, 1.2, 1.2, 1, 0.5])
+            with cols[0]:
+                st.write(f"**{item['nombre']}**")
+            with cols[1]:
+                st.write(f"${item['precio']:.2f}")
+            with cols[2]:
+                st.write(f"{item['precio'] * tasa:,.2f} Bs")
+            with cols[3]:
+                nueva_cant = st.number_input(
+                    "Cant.",
+                    min_value=0.0,
+                    max_value=1000.0,
+                    value=float(item['cantidad']),
+                    step=1.0,
+                    key=f"cant_{idx}",
+                    label_visibility="collapsed"
+                )
+                if nueva_cant != item['cantidad']:
+                    if nueva_cant == 0:
                         st.session_state.clientes[st.session_state.cliente_actual]['carrito'].pop(idx)
                         st.rerun()
-            
-            # Botón para actualizar (no es necesario porque ya se actualiza con cada cambio, pero lo dejamos por si acaso)
-            # st.form_submit_button("Actualizar carrito", use_container_width=True)  # opcional
-            
+                    else:
+                        # Recalcular precio según nueva cantidad (mayorista)
+                        prod_data = None
+                        if st.session_state.online_mode:
+                            try:
+                                prod_resp = db.table("inventario").select("precio_detal, precio_mayor, min_mayor").eq("id", item['id']).execute()
+                                if hasattr(prod_resp, 'data') and prod_resp.data:
+                                    prod_data = prod_resp.data[0]
+                            except:
+                                pass
+                        if not prod_data:
+                            inventario_local = OfflineManager.obtener_datos_local('inventario')
+                            if inventario_local:
+                                for p in inventario_local:
+                                    if p['id'] == item['id']:
+                                        prod_data = p
+                                        break
+                        if prod_data:
+                            if nueva_cant >= prod_data['min_mayor']:
+                                nuevo_precio = float(prod_data['precio_mayor'])
+                                tipo_precio = " (Mayor)"
+                            else:
+                                nuevo_precio = float(prod_data['precio_detal'])
+                                tipo_precio = ""
+                            item['precio'] = nuevo_precio
+                            item['tipo_precio'] = tipo_precio
+                        item['cantidad'] = nueva_cant
+                        item['subtotal'] = item['cantidad'] * item['precio']
+                        st.rerun()
+            with cols[4]:
+                if st.button("❌", key=f"del_{idx}"):
+                    st.session_state.clientes[st.session_state.cliente_actual]['carrito'].pop(idx)
+                    st.rerun()
+        
         # Cálculo de totales
         total_venta_usd = sum(item['subtotal'] for item in carrito)
         total_venta_bs = total_venta_usd * tasa
