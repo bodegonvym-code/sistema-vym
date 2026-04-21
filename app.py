@@ -890,7 +890,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA (POPOVER + CARRITO TABLA + AUTO-SELECCIÓN)
+# MÓDULO 2: PUNTO DE VENTA (POPOVER CONTROLADO + AUTO-SELECCIÓN CORREGIDA)
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -960,145 +960,162 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 st.rerun()
     
     # ============================================
-    # BUSCADOR EN POPOVER (con autoselección por código)
+    # CONTROL DEL POPOVER DEL BUSCADOR
     # ============================================
-    with st.popover("🔍 Buscar producto (código o nombre)", use_container_width=True):
-        busqueda = st.text_input("", placeholder="Escribe nombre o escanea código de barras...", key="buscar_popover")
-        
-        # Función auxiliar para agregar producto al carrito
-        def agregar_producto_al_carrito(prod):
-            carrito_actual = st.session_state.clientes[st.session_state.cliente_actual]['carrito']
-            encontrado = False
-            for item in carrito_actual:
-                if item['id'] == prod['id']:
-                    item['cantidad'] += 1
-                    item['subtotal'] = item['cantidad'] * item['precio']
-                    encontrado = True
-                    break
-            if not encontrado:
-                precio_base = float(prod['precio_detal'])
-                if 1 >= prod['min_mayor']:
-                    precio_final = float(prod['precio_mayor'])
-                    tipo_precio = " (Mayor)"
-                else:
-                    precio_final = precio_base
-                    tipo_precio = ""
-                st.session_state.clientes[st.session_state.cliente_actual]['carrito'].append({
-                    "id": prod['id'],
-                    "nombre": prod['nombre'],
-                    "cantidad": 1,
-                    "precio": precio_final,
-                    "costo": float(prod['costo']),
-                    "subtotal": precio_final,
-                    "tipo_precio": tipo_precio
-                })
-            st.rerun()
-        
-        # Si se presiona Enter y hay búsqueda, intentar autoselección por código exacto
-        if busqueda:
-            # Buscar coincidencia exacta en código principal o código alterno
-            producto_exacto = None
-            if st.session_state.online_mode:
-                try:
-                    # Buscar por código principal exacto
-                    resp_codigo = db.table("inventario").select("*").eq("codigo_barras", busqueda).gt("stock", 0).execute()
-                    if hasattr(resp_codigo, 'data') and resp_codigo.data:
-                        producto_exacto = resp_codigo.data[0]
+    if 'mostrar_buscador' not in st.session_state:
+        st.session_state.mostrar_buscador = False
+    
+    # Botón para abrir el buscador
+    if st.button("🔍 Buscar producto (código o nombre)", use_container_width=True):
+        st.session_state.mostrar_buscador = True
+        st.rerun()
+    
+    # Función auxiliar para agregar producto al carrito (se usa tanto en autoselección como en botón)
+    def agregar_producto_al_carrito(prod):
+        carrito_actual = st.session_state.clientes[st.session_state.cliente_actual]['carrito']
+        encontrado = False
+        for item in carrito_actual:
+            if item['id'] == prod['id']:
+                item['cantidad'] += 1
+                item['subtotal'] = item['cantidad'] * item['precio']
+                encontrado = True
+                break
+        if not encontrado:
+            precio_base = float(prod['precio_detal'])
+            if 1 >= prod['min_mayor']:
+                precio_final = float(prod['precio_mayor'])
+                tipo_precio = " (Mayor)"
+            else:
+                precio_final = precio_base
+                tipo_precio = ""
+            st.session_state.clientes[st.session_state.cliente_actual]['carrito'].append({
+                "id": prod['id'],
+                "nombre": prod['nombre'],
+                "cantidad": 1,
+                "precio": precio_final,
+                "costo": float(prod['costo']),
+                "subtotal": precio_final,
+                "tipo_precio": tipo_precio
+            })
+        # Cerrar buscador después de agregar
+        st.session_state.mostrar_buscador = False
+        st.rerun()
+    
+    # POPOVER DEL BUSCADOR (solo se muestra si la variable está activa)
+    if st.session_state.mostrar_buscador:
+        with st.popover("🔍 Buscar producto", use_container_width=True):
+            # Usamos un formulario para detectar el envío con Enter
+            with st.form(key="buscador_form"):
+                busqueda = st.text_input("", placeholder="Escribe nombre o escanea código de barras...", key="buscar_input")
+                submitted = st.form_submit_button("Buscar", use_container_width=True)
+                
+                # Procesar la búsqueda cuando se envía el formulario (Enter o clic en botón)
+                if submitted and busqueda:
+                    # 1. Intentar autoselección por código exacto (principal o alterno)
+                    producto_exacto = None
+                    busqueda_limpia = busqueda.strip()  # eliminar espacios extra
+                    if st.session_state.online_mode:
+                        try:
+                            # Buscar por código principal exacto
+                            resp_codigo = db.table("inventario").select("*").eq("codigo_barras", busqueda_limpia).gt("stock", 0).execute()
+                            if hasattr(resp_codigo, 'data') and resp_codigo.data:
+                                producto_exacto = resp_codigo.data[0]
+                            else:
+                                # Buscar por código alterno exacto
+                                resp_alterno = db.table("codigos_alternos").select("producto_id").eq("codigo", busqueda_limpia).execute()
+                                if hasattr(resp_alterno, 'data') and resp_alterno.data:
+                                    pid = resp_alterno.data[0]['producto_id']
+                                    resp_prod = db.table("inventario").select("*").eq("id", pid).gt("stock", 0).execute()
+                                    if hasattr(resp_prod, 'data') and resp_prod.data:
+                                        producto_exacto = resp_prod.data[0]
+                        except Exception as e:
+                            st.error(f"Error en autoselección: {e}")
                     else:
-                        # Buscar por código alterno exacto
-                        resp_alterno = db.table("codigos_alternos").select("producto_id").eq("codigo", busqueda).execute()
-                        if hasattr(resp_alterno, 'data') and resp_alterno.data:
-                            pid = resp_alterno.data[0]['producto_id']
-                            resp_prod = db.table("inventario").select("*").eq("id", pid).gt("stock", 0).execute()
-                            if hasattr(resp_prod, 'data') and resp_prod.data:
-                                producto_exacto = resp_prod.data[0]
-                except:
-                    pass
-            else:
-                # Modo offline: buscar en datos locales
-                datos_local = OfflineManager.obtener_datos_local('inventario')
-                if datos_local:
-                    for p in datos_local:
-                        if p.get('codigo_barras') == busqueda and p['stock'] > 0:
-                            producto_exacto = p
-                            break
+                        # Modo offline
+                        datos_local = OfflineManager.obtener_datos_local('inventario')
+                        if datos_local:
+                            for p in datos_local:
+                                if p.get('codigo_barras') == busqueda_limpia and p['stock'] > 0:
+                                    producto_exacto = p
+                                    break
+                    
+                    if producto_exacto:
+                        agregar_producto_al_carrito(producto_exacto)
+                        # El resto del código no se ejecuta porque hay rerun
+                    
+                    # 2. Si no hubo autoselección, mostrar resultados de búsqueda por nombre/código parcial
+                    # (Este bloque solo se ejecuta si no se encontró producto exacto)
                     if not producto_exacto:
-                        # Buscar en alternos (offline no tiene tabla, omitir)
-                        pass
+                        productos = []
+                        if st.session_state.online_mode:
+                            # Búsqueda por nombre
+                            try:
+                                resp_nombre = db.table("inventario").select("*").ilike("nombre", f"%{busqueda}%").gt("stock", 0).execute()
+                                if hasattr(resp_nombre, 'data'):
+                                    productos.extend(resp_nombre.data)
+                            except:
+                                pass
+                            # Búsqueda por código principal (parcial)
+                            try:
+                                resp_codigo = db.table("inventario").select("*").ilike("codigo_barras", f"%{busqueda}%").gt("stock", 0).execute()
+                                if hasattr(resp_codigo, 'data'):
+                                    productos.extend(resp_codigo.data)
+                            except:
+                                pass
+                            # Búsqueda por código alterno (exacto, ya lo usamos, pero aquí por si acaso)
+                            try:
+                                resp_alternos = db.table("codigos_alternos").select("producto_id").eq("codigo", busqueda_limpia).execute()
+                                if hasattr(resp_alternos, 'data') and resp_alternos.data:
+                                    ids = [item["producto_id"] for item in resp_alternos.data]
+                                    resp_prod_alt = db.table("inventario").select("*").in_("id", ids).gt("stock", 0).execute()
+                                    if hasattr(resp_prod_alt, 'data'):
+                                        productos.extend(resp_prod_alt.data)
+                            except:
+                                pass
+                            # Eliminar duplicados
+                            unicos = {}
+                            for p in productos:
+                                unicos[p['id']] = p
+                            productos = list(unicos.values())
+                            productos.sort(key=lambda x: x['nombre'])
+                            productos = productos[:30]
+                        else:
+                            # Modo offline
+                            datos_local = OfflineManager.obtener_datos_local('inventario')
+                            if datos_local:
+                                df_local = pd.DataFrame(datos_local)
+                                df_local = df_local[df_local['stock'] > 0]
+                                df_local = df_local[df_local['nombre'].str.contains(busqueda, case=False, na=False)]
+                                productos = df_local.to_dict('records')
+                        
+                        if productos:
+                            st.markdown("---")
+                            cols_header = st.columns([3, 1, 1, 1, 0.8])
+                            cols_header[0].write("**Producto**")
+                            cols_header[1].write("**Stock**")
+                            cols_header[2].write("**Precio USD**")
+                            cols_header[3].write("**Precio Bs**")
+                            cols_header[4].write("")
+                            st.markdown("---")
+                            for prod in productos:
+                                precio_usd = float(prod['precio_detal'])
+                                precio_bs = precio_usd * tasa
+                                col1, col2, col3, col4, col5 = st.columns([3, 1, 1, 1, 0.8])
+                                col1.write(prod['nombre'])
+                                col2.write(f"{prod['stock']:.0f}")
+                                col3.write(f"${precio_usd:.2f}")
+                                col4.write(f"{precio_bs:,.2f} Bs")
+                                if col5.button("➕", key=f"popover_add_{prod['id']}"):
+                                    agregar_producto_al_carrito(prod)
+                        else:
+                            st.info("No se encontraron productos")
+                elif not busqueda:
+                    st.info("Escribe el nombre o escanea un código de barras")
             
-            if producto_exacto:
-                agregar_producto_al_carrito(producto_exacto)
-                # El popover se cierra automáticamente al rerun
+            # Botón para cerrar manualmente el popover (opcional)
+            if st.button("Cerrar buscador", use_container_width=True):
+                st.session_state.mostrar_buscador = False
                 st.rerun()
-        
-        # Mostrar resultados de búsqueda (por nombre o código parcial)
-        if busqueda:
-            productos = []
-            if st.session_state.online_mode:
-                # Búsqueda por nombre
-                try:
-                    resp_nombre = db.table("inventario").select("*").ilike("nombre", f"%{busqueda}%").gt("stock", 0).execute()
-                    if hasattr(resp_nombre, 'data'):
-                        productos.extend(resp_nombre.data)
-                except:
-                    pass
-                # Búsqueda por código principal (parcial)
-                try:
-                    resp_codigo = db.table("inventario").select("*").ilike("codigo_barras", f"%{busqueda}%").gt("stock", 0).execute()
-                    if hasattr(resp_codigo, 'data'):
-                        productos.extend(resp_codigo.data)
-                except:
-                    pass
-                # Búsqueda por código alterno (exacto, ya lo usamos para autoselección, pero aquí también para mostrar)
-                try:
-                    resp_alternos = db.table("codigos_alternos").select("producto_id").eq("codigo", busqueda).execute()
-                    if hasattr(resp_alternos, 'data') and resp_alternos.data:
-                        ids = [item["producto_id"] for item in resp_alternos.data]
-                        resp_prod_alt = db.table("inventario").select("*").in_("id", ids).gt("stock", 0).execute()
-                        if hasattr(resp_prod_alt, 'data'):
-                            productos.extend(resp_prod_alt.data)
-                except:
-                    pass
-                # Eliminar duplicados
-                unicos = {}
-                for p in productos:
-                    unicos[p['id']] = p
-                productos = list(unicos.values())
-                productos.sort(key=lambda x: x['nombre'])
-                productos = productos[:30]  # límite
-            else:
-                # Modo offline: solo buscar por nombre
-                datos_local = OfflineManager.obtener_datos_local('inventario')
-                if datos_local:
-                    df_local = pd.DataFrame(datos_local)
-                    df_local = df_local[df_local['stock'] > 0]
-                    df_local = df_local[df_local['nombre'].str.contains(busqueda, case=False, na=False)]
-                    productos = df_local.to_dict('records')
-            
-            if productos:
-                st.markdown("---")
-                cols_header = st.columns([3, 1, 1, 1, 0.8])
-                cols_header[0].write("**Producto**")
-                cols_header[1].write("**Stock**")
-                cols_header[2].write("**Precio USD**")
-                cols_header[3].write("**Precio Bs**")
-                cols_header[4].write("")
-                st.markdown("---")
-                for prod in productos:
-                    precio_usd = float(prod['precio_detal'])
-                    precio_bs = precio_usd * tasa
-                    col1, col2, col3, col4, col5 = st.columns([3, 1, 1, 1, 0.8])
-                    col1.write(prod['nombre'])
-                    col2.write(f"{prod['stock']:.0f}")
-                    col3.write(f"${precio_usd:.2f}")
-                    col4.write(f"{precio_bs:,.2f} Bs")
-                    if col5.button("➕", key=f"popover_add_{prod['id']}"):
-                        agregar_producto_al_carrito(prod)
-                        st.rerun()
-            else:
-                st.info("No se encontraron productos")
-        else:
-            st.info("Escribe el nombre o escanea un código de barras")
     
     # ============================================
     # CARRITO EN LISTA COMPACTA CON SCROLL Y CABECERAS
