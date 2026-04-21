@@ -890,7 +890,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA (BUSCADOR PROFESIONAL + CARRITO TABLA)
+# MÓDULO 2: PUNTO DE VENTA (BUSCADOR INTELIGENTE EN HEADER)
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -939,7 +939,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
     cliente_actual = st.session_state.clientes[st.session_state.cliente_actual]
     st.divider()
     
-    # CABECERA DEL CLIENTE ACTUAL
+    # CABECERA DEL CLIENTE ACTUAL (más compacta)
     col_cliente_info1, col_cliente_info2, col_cliente_info3 = st.columns([2, 2, 1])
     with col_cliente_info1:
         st.markdown(f"**Cliente:** {cliente_actual['nombre']}")
@@ -960,18 +960,25 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 st.rerun()
     
     # ============================================
-    # CONTROL DEL POPOVER DEL BUSCADOR
+    # BUSCADOR INTELIGENTE (HEADER)
     # ============================================
-    if 'mostrar_buscador' not in st.session_state:
-        st.session_state.mostrar_buscador = False
+    # Inicializar estado para controlar el foco y el valor del buscador
+    if 'buscador_valor' not in st.session_state:
+        st.session_state.buscador_valor = ""
+    if 'foco_buscador' not in st.session_state:
+        st.session_state.foco_buscador = False
     
-    # Botón elegante para abrir el buscador
-    if st.button("🔍 Buscar producto (código o nombre)", use_container_width=True, type="primary"):
-        st.session_state.mostrar_buscador = True
-        st.rerun()
+    # Campo de búsqueda
+    busqueda = st.text_input(
+        "🔍 Buscar producto (nombre o código de barras)",
+        value=st.session_state.buscador_valor,
+        key="buscador_input",
+        placeholder="Escribe el nombre o escanea el código...",
+        label_visibility="collapsed"
+    )
     
-    # Función auxiliar para agregar producto al carrito (cierra buscador)
-    def agregar_producto_al_carrito(prod):
+    # Función para agregar producto al carrito (centralizada)
+    def agregar_producto_al_carrito(prod, cerrar_buscador=True):
         carrito_actual = st.session_state.clientes[st.session_state.cliente_actual]['carrito']
         encontrado = False
         for item in carrito_actual:
@@ -997,113 +1004,169 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 "subtotal": precio_final,
                 "tipo_precio": tipo_precio
             })
-        # Cerrar buscador después de agregar
-        st.session_state.mostrar_buscador = False
+        # Limpiar buscador y mantener foco
+        st.session_state.buscador_valor = ""
+        st.session_state.foco_buscador = True
         st.rerun()
     
-    # POPOVER DEL BUSCADOR (diseño profesional)
-    if st.session_state.mostrar_buscador:
-        with st.popover("🔍 Buscar producto", use_container_width=True):
-            # Formulario para capturar Enter
-            with st.form(key="buscador_form", clear_on_submit=False):
-                busqueda = st.text_input("", placeholder="Escribe nombre o escanea código de barras...", key="buscar_input")
-                submitted = st.form_submit_button("🔎 Buscar", use_container_width=True)
-            
-            # Procesar búsqueda cuando se envía el formulario (Enter o clic en Buscar)
-            if submitted and busqueda:
-                busqueda_limpia = busqueda.strip()
-                # 1. Autoselección por código exacto
-                producto_exacto = None
-                if st.session_state.online_mode:
-                    try:
-                        resp_codigo = db.table("inventario").select("*").eq("codigo_barras", busqueda_limpia).gt("stock", 0).execute()
-                        if hasattr(resp_codigo, 'data') and resp_codigo.data:
-                            producto_exacto = resp_codigo.data[0]
-                        else:
-                            resp_alterno = db.table("codigos_alternos").select("producto_id").eq("codigo", busqueda_limpia).execute()
-                            if hasattr(resp_alterno, 'data') and resp_alterno.data:
-                                pid = resp_alterno.data[0]['producto_id']
-                                resp_prod = db.table("inventario").select("*").eq("id", pid).gt("stock", 0).execute()
-                                if hasattr(resp_prod, 'data') and resp_prod.data:
-                                    producto_exacto = resp_prod.data[0]
-                    except:
-                        pass
+    # Procesar entrada: si se presiona Enter, intentar autoselección por código exacto
+    # Nota: Streamlit no captura directamente el evento Enter en el text_input,
+    # pero podemos usar un truco: si el valor cambió y es diferente al anterior, asumimos Enter?
+    # Mejor: al hacer rerun, si hay valor y es un código exacto, agregamos.
+    # Para ello, detectamos si el usuario escribió y presionó Enter (sin necesidad de botón).
+    # Como no hay botón, usaremos la siguiente lógica: al cambiar el valor, no hacemos nada.
+    # Solo procesamos cuando se envía el formulario. Pero no hay formulario.
+    # La solución más simple: agregar un botón "Buscar" y otro "Agregar por código"?
+    # No, el usuario quiere que al presionar Enter se agregue automáticamente.
+    # En Streamlit, un st.text_input no tiene evento on_enter. Podemos usar st.form con un solo campo.
+    # Usaremos un formulario que contenga el campo y un botón oculto, o simplemente un botón "Agregar".
+    # Para no complicar, pondremos un botón "➕ Agregar por código" al lado del campo, pero el usuario
+    # quiere que sea automático al presionar Enter. No es posible de forma nativa.
+    # Una alternativa: usar st.chat_input? No es apropiado.
+    # Decido: mantendremos un botón "Buscar/Agregar" y además la tabla de resultados.
+    # Pero para cumplir con la solicitud de "escáner", haremos que al detectar un código de barras
+    # (que normalmente termina con Enter), el sistema lo agregue. Para eso, simulamos un formulario
+    # con un solo campo y un botón submit invisible (usando CSS). Implementaremos un formulario
+    # con st.form y un botón de submit que no se muestre (mediante CSS), y al presionar Enter
+    # se envía el formulario. Eso sí funciona.
+    
+    # Usamos un formulario para capturar Enter
+    with st.form(key="buscador_form", clear_on_submit=False):
+        # El campo ya está definido arriba? Lo movemos dentro del formulario.
+        # Para no duplicar, redefinimos el campo dentro del formulario.
+        # Nota: No se puede tener el mismo key. Usaremos un key diferente.
+        busqueda_form = st.text_input(
+            "🔍 Buscar producto (nombre o código de barras)",
+            value=st.session_state.get('buscador_valor_temp', ''),
+            key="buscador_form_input",
+            placeholder="Escribe el nombre o escanea el código...",
+            label_visibility="collapsed"
+        )
+        submitted = st.form_submit_button("➕ Agregar por código", use_container_width=True)
+    
+    # Sincronizar el valor del formulario con el estado
+    if 'buscador_valor_temp' not in st.session_state:
+        st.session_state.buscador_valor_temp = ""
+    
+    # Si se envía el formulario (Enter o clic en botón), procesar autoselección
+    if submitted and busqueda_form.strip():
+        busqueda_limpia = busqueda_form.strip()
+        # Buscar producto por código exacto
+        producto_exacto = None
+        if st.session_state.online_mode:
+            try:
+                resp_codigo = db.table("inventario").select("*").eq("codigo_barras", busqueda_limpia).gt("stock", 0).execute()
+                if hasattr(resp_codigo, 'data') and resp_codigo.data:
+                    producto_exacto = resp_codigo.data[0]
                 else:
-                    datos_local = OfflineManager.obtener_datos_local('inventario')
-                    if datos_local:
-                        for p in datos_local:
-                            if p.get('codigo_barras') == busqueda_limpia and p['stock'] > 0:
-                                producto_exacto = p
-                                break
-                
-                if producto_exacto:
-                    agregar_producto_al_carrito(producto_exacto)
-                    # No continuar mostrando resultados porque se cerrará el popover
-                
-                # 2. Si no hubo autoselección, buscar resultados por nombre/código parcial
-                if not producto_exacto:
-                    productos = []
-                    if st.session_state.online_mode:
-                        try:
-                            resp_nombre = db.table("inventario").select("*").ilike("nombre", f"%{busqueda}%").gt("stock", 0).execute()
-                            if hasattr(resp_nombre, 'data'):
-                                productos.extend(resp_nombre.data)
-                        except:
-                            pass
-                        try:
-                            resp_codigo = db.table("inventario").select("*").ilike("codigo_barras", f"%{busqueda}%").gt("stock", 0).execute()
-                            if hasattr(resp_codigo, 'data'):
-                                productos.extend(resp_codigo.data)
-                        except:
-                            pass
-                        # Eliminar duplicados
-                        unicos = {}
-                        for p in productos:
-                            unicos[p['id']] = p
-                        productos = list(unicos.values())
-                        productos.sort(key=lambda x: x['nombre'])
-                        productos = productos[:30]
-                    else:
-                        datos_local = OfflineManager.obtener_datos_local('inventario')
-                        if datos_local:
-                            df_local = pd.DataFrame(datos_local)
-                            df_local = df_local[df_local['stock'] > 0]
-                            df_local = df_local[df_local['nombre'].str.contains(busqueda, case=False, na=False)]
-                            productos = df_local.to_dict('records')
-                    
-                    if productos:
-                        st.markdown("---")
-                        # Cabeceras con estilo
-                        cols_head = st.columns([3, 1, 1, 1, 0.8])
-                        cols_head[0].markdown("**Producto**")
-                        cols_head[1].markdown("**Stock**")
-                        cols_head[2].markdown("**Precio USD**")
-                        cols_head[3].markdown("**Precio Bs**")
-                        cols_head[4].markdown("")
-                        st.markdown("---")
-                        for prod in productos:
-                            precio_usd = float(prod['precio_detal'])
-                            precio_bs = precio_usd * tasa
-                            col1, col2, col3, col4, col5 = st.columns([3, 1, 1, 1, 0.8])
-                            col1.write(prod['nombre'])
-                            col2.write(f"{prod['stock']:.0f}")
-                            col3.write(f"${precio_usd:.2f}")
-                            col4.write(f"{precio_bs:,.2f} Bs")
-                            # Botón fuera del formulario, sin problemas
-                            if col5.button("➕", key=f"popover_add_{prod['id']}"):
-                                agregar_producto_al_carrito(prod)
-                    else:
-                        st.info("No se encontraron productos")
-            elif not busqueda:
-                st.info("Escribe el nombre o escanea un código de barras")
-            
-            # Botón para cerrar manualmente (opcional, pero útil)
-            if st.button("❌ Cerrar buscador", use_container_width=True):
-                st.session_state.mostrar_buscador = False
-                st.rerun()
+                    resp_alterno = db.table("codigos_alternos").select("producto_id").eq("codigo", busqueda_limpia).execute()
+                    if hasattr(resp_alterno, 'data') and resp_alterno.data:
+                        pid = resp_alterno.data[0]['producto_id']
+                        resp_prod = db.table("inventario").select("*").eq("id", pid).gt("stock", 0).execute()
+                        if hasattr(resp_prod, 'data') and resp_prod.data:
+                            producto_exacto = resp_prod.data[0]
+            except:
+                pass
+        else:
+            datos_local = OfflineManager.obtener_datos_local('inventario')
+            if datos_local:
+                for p in datos_local:
+                    if p.get('codigo_barras') == busqueda_limpia and p['stock'] > 0:
+                        producto_exacto = p
+                        break
+        
+        if producto_exacto:
+            agregar_producto_al_carrito(producto_exacto)
+            # Limpiar estado temporal
+            st.session_state.buscador_valor_temp = ""
+            st.rerun()
+        else:
+            # Si no es código exacto, no hacer nada, pero mostrar resultados debajo
+            # Guardamos el valor para mostrar resultados
+            st.session_state.buscador_valor_temp = busqueda_form
+    else:
+        # Si no se envió, actualizamos el valor temporal para mostrar resultados en vivo
+        if busqueda_form != st.session_state.get('buscador_valor_temp', ''):
+            st.session_state.buscador_valor_temp = busqueda_form
+            st.rerun()
+    
+    # Mostrar resultados de búsqueda (si hay texto en el campo)
+    busqueda_actual = st.session_state.get('buscador_valor_temp', '')
+    if busqueda_actual:
+        productos = []
+        if st.session_state.online_mode:
+            # Búsqueda por nombre (coincidencia en cualquier parte)
+            try:
+                resp_nombre = db.table("inventario").select("*").ilike("nombre", f"%{busqueda_actual}%").gt("stock", 0).execute()
+                if hasattr(resp_nombre, 'data'):
+                    productos.extend(resp_nombre.data)
+            except:
+                pass
+            # Búsqueda por código principal (parcial)
+            try:
+                resp_codigo = db.table("inventario").select("*").ilike("codigo_barras", f"%{busqueda_actual}%").gt("stock", 0).execute()
+                if hasattr(resp_codigo, 'data'):
+                    productos.extend(resp_codigo.data)
+            except:
+                pass
+            # Eliminar duplicados
+            unicos = {}
+            for p in productos:
+                unicos[p['id']] = p
+            productos = list(unicos.values())
+            productos.sort(key=lambda x: x['nombre'])
+            productos = productos[:30]
+        else:
+            # Modo offline
+            datos_local = OfflineManager.obtener_datos_local('inventario')
+            if datos_local:
+                df_local = pd.DataFrame(datos_local)
+                df_local = df_local[df_local['stock'] > 0]
+                df_local = df_local[df_local['nombre'].str.contains(busqueda_actual, case=False, na=False)]
+                productos = df_local.to_dict('records')
+        
+        if productos:
+            st.markdown("---")
+            # Cabeceras de la tabla de resultados
+            cols_head = st.columns([3, 1, 1, 1, 0.8])
+            cols_head[0].markdown("**Producto**")
+            cols_head[1].markdown("**Stock**")
+            cols_head[2].markdown("**Precio USD**")
+            cols_head[3].markdown("**Precio Bs**")
+            cols_head[4].markdown("")
+            st.markdown("---")
+            for prod in productos:
+                precio_usd = float(prod['precio_detal'])
+                precio_bs = precio_usd * tasa
+                col1, col2, col3, col4, col5 = st.columns([3, 1, 1, 1, 0.8])
+                col1.write(prod['nombre'])
+                col2.write(f"{prod['stock']:.0f}")
+                col3.write(f"${precio_usd:.2f}")
+                col4.write(f"{precio_bs:,.2f} Bs")
+                if col5.button("➕", key=f"result_add_{prod['id']}"):
+                    agregar_producto_al_carrito(prod)
+        else:
+            st.info("No se encontraron productos")
+    
+    # Script para enfocar automáticamente el campo de búsqueda después de cada rerun
+    if st.session_state.get('foco_buscador', False):
+        st.session_state.foco_buscador = False
+        st.components.v1.html(
+            """
+            <script>
+                setTimeout(() => {
+                    const input = document.querySelector('input[aria-label="buscar_form_input"]');
+                    if (input) {
+                        input.focus();
+                    }
+                }, 100);
+            </script>
+            """,
+            height=0,
+        )
     
     # ============================================
-    # CARRITO EN LISTA COMPACTA CON SCROLL Y CABECERAS
+    # CARRITO EN LISTA COMPACTA CON SCROLL Y CABECERAS (SIN CAMBIOS)
     # ============================================
     st.subheader(f"🛒 Carrito - {cliente_actual['nombre']}")
     carrito = cliente_actual['carrito']
@@ -1357,7 +1420,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                     st.balloons()
                     st.success(f"✅ Venta registrada - {cliente_actual['nombre']}{info_cliente}")
                     
-                    # TICKET (MANTENEMOS EL ACTUAL, CON DIALOG Y DATAFRAME)
+                    # TICKET (MANTENEMOS EL ACTUAL)
                     @st.dialog("🧾 Ticket de Venta")
                     def mostrar_ticket():
                         st.markdown("### BODEGÓN VYM")
