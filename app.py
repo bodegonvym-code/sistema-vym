@@ -603,7 +603,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA (CAMPO PRINCIPAL PARA CÓDIGO + POPOVER PARA BÚSQUEDA POR NOMBRE)
+# MÓDULO 2: PUNTO DE VENTA (CAMPO CÓDIGO + POPOVER NOMBRE + CARRITO MEJORADO)
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -672,9 +672,8 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 st.rerun()
     
     # ============================================
-    # CAMPO PRINCIPAL PARA CÓDIGO DE BARRAS (autoselección al Enter)
+    # CACHE DEL INVENTARIO
     # ============================================
-    # Cache del inventario
     @st.cache_data(ttl=60, show_spinner=False)
     def cargar_inventario():
         try:
@@ -686,23 +685,30 @@ elif opcion == "🛒 PUNTO DE VENTA":
     
     inventario = cargar_inventario()
     if not inventario:
-        st.warning("No se pudo cargar el inventario.")
+        st.warning("No se pudo cargar el inventario. Verifica la conexión.")
         st.stop()
     
-    # Estado para el campo de código
-    if 'codigo_valor' not in st.session_state:
-        st.session_state.codigo_valor = ""
-    if 'foco_codigo' not in st.session_state:
-        st.session_state.foco_codigo = False
-    
-    # Función para agregar producto
+    # ============================================
+    # FUNCIÓN PARA AGREGAR PRODUCTO (CON RECÁLCULO DE PRECIO AL INCREMENTAR)
+    # ============================================
     def agregar_producto(prod):
         carrito = st.session_state.clientes[st.session_state.cliente_actual]['carrito']
         encontrado = False
         for item in carrito:
             if item['id'] == prod['id']:
-                item['cantidad'] += 1
+                # Incrementar cantidad
+                nueva_cant = item['cantidad'] + 1
+                # Recalcular precio según nueva cantidad (mayorista o detal)
+                if nueva_cant >= prod['min_mayor']:
+                    nuevo_precio = float(prod['precio_mayor'])
+                    tipo_precio = " (Mayor)"
+                else:
+                    nuevo_precio = float(prod['precio_detal'])
+                    tipo_precio = ""
+                item['cantidad'] = nueva_cant
+                item['precio'] = nuevo_precio
                 item['subtotal'] = item['cantidad'] * item['precio']
+                item['tipo_precio'] = tipo_precio
                 encontrado = True
                 break
         if not encontrado:
@@ -722,12 +728,11 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 "subtotal": precio_final,
                 "tipo_precio": tipo_precio
             })
-        # Limpiar campo y enfocar
-        st.session_state.codigo_valor = ""
-        st.session_state.foco_codigo = True
         st.rerun()
     
-    # Formulario para el campo de código (autoselección al Enter)
+    # ============================================
+    # CAMPO PRINCIPAL PARA CÓDIGO DE BARRAS (se limpia automáticamente)
+    # ============================================
     st.markdown("""
         <style>
         .stForm > div:first-child > div:last-child {
@@ -742,11 +747,10 @@ elif opcion == "🛒 PUNTO DE VENTA":
         </style>
     """, unsafe_allow_html=True)
     
-    with st.form(key="codigo_form"):
+    # Formulario que se limpia automáticamente después de enviar
+    with st.form(key="codigo_form", clear_on_submit=True):
         codigo_input = st.text_input(
             "🔖 Escanear código de barras",
-            value=st.session_state.codigo_valor,
-            key="codigo_input",
             placeholder="Escanea o escribe el código...",
             label_visibility="collapsed"
         )
@@ -776,31 +780,24 @@ elif opcion == "🛒 PUNTO DE VENTA":
             agregar_producto(producto)
         else:
             st.warning(f"Código '{codigo}' no encontrado o sin stock.")
-            st.session_state.codigo_valor = ""  # Limpiar campo
-    
-    # Enfocar automáticamente el campo de código después de agregar
-    if st.session_state.get('foco_codigo', False):
-        st.session_state.foco_codigo = False
-        st.components.v1.html(
-            """
-            <script>
-            setTimeout(() => {
-                const input = document.querySelector('input[aria-label="codigo_input"]');
-                if (input) input.focus();
-            }, 100);
-            </script>
-            """,
-            height=0,
-        )
     
     # ============================================
     # BOTÓN PARA BUSCAR POR NOMBRE (POPOVER)
     # ============================================
+    # Estado para limpiar el campo del popover después de agregar
+    if 'buscar_nombre_valor' not in st.session_state:
+        st.session_state.buscar_nombre_valor = ""
+    
     with st.popover("🔍 Buscar por nombre", use_container_width=True):
         st.markdown("**Escribe el nombre del producto:**")
-        busqueda_nombre = st.text_input("", placeholder="Ej: Harina, Aceite, Coca...", key="buscar_nombre_popover")
+        busqueda_nombre = st.text_input(
+            "",
+            value=st.session_state.buscar_nombre_valor,
+            key="buscar_nombre_popover",
+            placeholder="Ej: Harina, Aceite, Coca...",
+            label_visibility="collapsed"
+        )
         if busqueda_nombre:
-            # Filtrar productos por nombre (coincidencia parcial)
             resultados = []
             for p in inventario:
                 if p['stock'] <= 0:
@@ -828,6 +825,8 @@ elif opcion == "🛒 PUNTO DE VENTA":
                     c4.write(f"{precio_bs:,.2f} Bs")
                     if c5.button("➕", key=f"pop_add_{prod['id']}"):
                         agregar_producto(prod)
+                        # Limpiar el campo del popover
+                        st.session_state.buscar_nombre_valor = ""
                         st.rerun()
             else:
                 st.info("No se encontraron productos con ese nombre.")
@@ -835,7 +834,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
             st.info("Escribe al menos una letra para buscar.")
     
     # ============================================
-    # CARRITO (igual que antes, mejorado)
+    # CARRITO CON MEJORAS (keys por id)
     # ============================================
     st.subheader(f"🛒 Carrito - {cliente_actual['nombre']}")
     carrito = cliente_actual['carrito']
@@ -886,7 +885,9 @@ elif opcion == "🛒 PUNTO DE VENTA":
         total_venta_usd = 0.0
         total_costo = 0.0
         
-        for idx, item in enumerate(carrito):
+        for item in carrito:
+            # Usamos el id del producto como key para evitar problemas de índice
+            key_id = f"cant_{item['id']}"
             cols = st.columns([2.5, 1, 1, 1, 0.5])
             cols[0].write(item['nombre'])
             cols[1].write(f"${item['precio']:.2f}")
@@ -898,14 +899,15 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 max_value=1000.0,
                 value=float(item['cantidad']),
                 step=1.0,
-                key=f"cant_{idx}",
+                key=key_id,
                 label_visibility="collapsed"
             )
             if nueva_cant != item['cantidad']:
                 if nueva_cant == 0:
-                    st.session_state.clientes[st.session_state.cliente_actual]['carrito'].pop(idx)
+                    st.session_state.clientes[st.session_state.cliente_actual]['carrito'].remove(item)
                     st.rerun()
                 else:
+                    # Recalcular precio mayorista según nueva cantidad
                     prod_data = None
                     for p in inventario:
                         if p['id'] == item['id']:
@@ -914,15 +916,18 @@ elif opcion == "🛒 PUNTO DE VENTA":
                     if prod_data:
                         if nueva_cant >= prod_data['min_mayor']:
                             nuevo_precio = float(prod_data['precio_mayor'])
+                            tipo_precio = " (Mayor)"
                         else:
                             nuevo_precio = float(prod_data['precio_detal'])
+                            tipo_precio = ""
                         item['precio'] = nuevo_precio
+                        item['tipo_precio'] = tipo_precio
                     item['cantidad'] = nueva_cant
                     item['subtotal'] = item['cantidad'] * item['precio']
                     st.rerun()
             
-            if cols[4].button("❌", key=f"del_{idx}"):
-                st.session_state.clientes[st.session_state.cliente_actual]['carrito'].pop(idx)
+            if cols[4].button("❌", key=f"del_{item['id']}"):
+                st.session_state.clientes[st.session_state.cliente_actual]['carrito'].remove(item)
                 st.rerun()
             
             total_venta_usd += item['subtotal']
@@ -982,7 +987,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 col_r3.metric("Faltante USD", f"${abs(vuelto):,.2f}", delta_color="inverse")
             st.success(f"✅ Pago suficiente. Vuelto: ${vuelto:.2f} / {(vuelto * tasa):,.2f} Bs" if vuelto >= -0.01 else f"❌ Faltante: ${abs(vuelto):,.2f} / {(abs(vuelto) * tasa):,.2f} Bs")
         
-        # BOTONES
+        # BOTONES DE ACCIÓN
         col_b1, col_b2, col_b3 = st.columns(3)
         with col_b1:
             if st.button("🔄 Limpiar carrito", use_container_width=True):
