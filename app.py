@@ -603,7 +603,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA (PROFESIONAL, CON ATAJOS Y OPTIMIZACIÓN)
+# MÓDULO 2: PUNTO DE VENTA (CAMPO PRINCIPAL PARA CÓDIGO + POPOVER PARA BÚSQUEDA POR NOMBRE)
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -672,11 +672,11 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 st.rerun()
     
     # ============================================
-    # BUSCADOR INTELIGENTE (con caché)
+    # CAMPO PRINCIPAL PARA CÓDIGO DE BARRAS (autoselección al Enter)
     # ============================================
+    # Cache del inventario
     @st.cache_data(ttl=60, show_spinner=False)
     def cargar_inventario():
-        """Carga el inventario desde Supabase con caché de 60 segundos."""
         try:
             response = db.table("inventario").select("*").execute()
             return response.data if response.data else []
@@ -686,45 +686,16 @@ elif opcion == "🛒 PUNTO DE VENTA":
     
     inventario = cargar_inventario()
     if not inventario:
-        st.warning("No se pudo cargar el inventario. Verifica la conexión.")
+        st.warning("No se pudo cargar el inventario.")
         st.stop()
     
-    # Ocultar el botón de submit del formulario
-    st.markdown("""
-        <style>
-        .stForm > div:first-child > div:last-child {
-            display: none;
-        }
-        /* Estilo para el campo de búsqueda */
-        .stTextInput > div > div > input {
-            border-radius: 30px;
-            padding: 0.75rem 1rem;
-            border: 1px solid #ccc;
-            transition: all 0.3s;
-        }
-        .stTextInput > div > div > input:focus {
-            border-color: #1E88E5;
-            box-shadow: 0 0 0 2px rgba(30,136,229,0.2);
-        }
-        /* Estilo para la tabla de resultados */
-        .resultados-table {
-            border-collapse: collapse;
-            width: 100%;
-        }
-        .resultados-table tr:hover {
-            background-color: #f5f5f5;
-            cursor: pointer;
-        }
-        </style>
-    """, unsafe_allow_html=True)
+    # Estado para el campo de código
+    if 'codigo_valor' not in st.session_state:
+        st.session_state.codigo_valor = ""
+    if 'foco_codigo' not in st.session_state:
+        st.session_state.foco_codigo = False
     
-    # Estado para la búsqueda
-    if 'buscar_valor' not in st.session_state:
-        st.session_state.buscar_valor = ""
-    if 'foco_buscador' not in st.session_state:
-        st.session_state.foco_buscador = False
-    
-    # Función para agregar producto (con optimización)
+    # Función para agregar producto
     def agregar_producto(prod):
         carrito = st.session_state.clientes[st.session_state.cliente_actual]['carrito']
         encontrado = False
@@ -751,34 +722,47 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 "subtotal": precio_final,
                 "tipo_precio": tipo_precio
             })
-        # Limpiar campo y mantener foco
-        st.session_state.buscar_valor = ""
-        st.session_state.foco_buscador = True
+        # Limpiar campo y enfocar
+        st.session_state.codigo_valor = ""
+        st.session_state.foco_codigo = True
         st.rerun()
     
-    # Formulario de búsqueda (el botón de submit está oculto)
-    with st.form(key="buscar_form"):
-        busqueda = st.text_input(
-            "🔍 Buscar producto (nombre o código de barras)",
-            value=st.session_state.buscar_valor,
-            key="buscar_input",
-            placeholder="Escribe el nombre o escanea el código...",
+    # Formulario para el campo de código (autoselección al Enter)
+    st.markdown("""
+        <style>
+        .stForm > div:first-child > div:last-child {
+            display: none;
+        }
+        .stTextInput > div > div > input {
+            border-radius: 30px;
+            padding: 0.75rem 1rem;
+            border: 1px solid #ccc;
+            font-size: 1rem;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    with st.form(key="codigo_form"):
+        codigo_input = st.text_input(
+            "🔖 Escanear código de barras",
+            value=st.session_state.codigo_valor,
+            key="codigo_input",
+            placeholder="Escanea o escribe el código...",
             label_visibility="collapsed"
         )
-        submitted = st.form_submit_button("Buscar")
+        submitted = st.form_submit_button("")
     
-    # Procesar autoselección por código (Enter)
-    if submitted and busqueda.strip():
-        codigo = busqueda.strip()
+    if submitted and codigo_input.strip():
+        codigo = codigo_input.strip()
         producto = None
-        try:
-            # Buscar por código principal
-            for p in inventario:
-                if p.get('codigo_barras') == codigo and p['stock'] > 0:
-                    producto = p
-                    break
-            if not producto:
-                # Buscar en códigos alternos (consulta adicional)
+        # Buscar por código principal
+        for p in inventario:
+            if p.get('codigo_barras') == codigo and p['stock'] > 0:
+                producto = p
+                break
+        if not producto:
+            # Buscar en códigos alternos
+            try:
                 resp_alt = db.table("codigos_alternos").select("producto_id").eq("codigo", codigo).execute()
                 if hasattr(resp_alt, 'data') and resp_alt.data:
                     pid = resp_alt.data[0]['producto_id']
@@ -786,55 +770,22 @@ elif opcion == "🛒 PUNTO DE VENTA":
                         if p['id'] == pid and p['stock'] > 0:
                             producto = p
                             break
-        except:
-            pass
+            except:
+                pass
         if producto:
             agregar_producto(producto)
         else:
-            st.session_state.buscar_valor = busqueda
+            st.warning(f"Código '{codigo}' no encontrado o sin stock.")
+            st.session_state.codigo_valor = ""  # Limpiar campo
     
-    # Mostrar resultados de búsqueda por nombre
-    texto_busqueda = st.session_state.buscar_valor
-    if texto_busqueda:
-        # Filtrar productos por nombre o código parcial
-        productos_filtrados = []
-        for p in inventario:
-            if p['stock'] <= 0:
-                continue
-            if texto_busqueda.lower() in p['nombre'].lower() or (p.get('codigo_barras') and texto_busqueda.lower() in p['codigo_barras'].lower()):
-                productos_filtrados.append(p)
-        productos_filtrados = productos_filtrados[:30]
-        
-        if productos_filtrados:
-            st.markdown("---")
-            cols = st.columns([3, 1, 1, 1, 0.8])
-            cols[0].markdown("**Producto**")
-            cols[1].markdown("**Stock**")
-            cols[2].markdown("**Precio USD**")
-            cols[3].markdown("**Precio Bs**")
-            cols[4].markdown("")
-            st.markdown("---")
-            for prod in productos_filtrados:
-                precio_usd = float(prod['precio_detal'])
-                precio_bs = precio_usd * tasa
-                c1, c2, c3, c4, c5 = st.columns([3, 1, 1, 1, 0.8])
-                c1.write(prod['nombre'])
-                c2.write(f"{prod['stock']:.0f}")
-                c3.write(f"${precio_usd:.2f}")
-                c4.write(f"{precio_bs:,.2f} Bs")
-                if c5.button("➕", key=f"add_{prod['id']}"):
-                    agregar_producto(prod)
-        else:
-            st.info("No se encontraron productos")
-    
-    # Script para enfocar automáticamente y atajos de teclado
-    if st.session_state.get('foco_buscador', False):
-        st.session_state.foco_buscador = False
+    # Enfocar automáticamente el campo de código después de agregar
+    if st.session_state.get('foco_codigo', False):
+        st.session_state.foco_codigo = False
         st.components.v1.html(
             """
             <script>
             setTimeout(() => {
-                const input = document.querySelector('input[aria-label="buscar_input"]');
+                const input = document.querySelector('input[aria-label="codigo_input"]');
                 if (input) input.focus();
             }, 100);
             </script>
@@ -842,38 +793,49 @@ elif opcion == "🛒 PUNTO DE VENTA":
             height=0,
         )
     
-    # Atajos de teclado: F2 enfoca, F10 cobra (si hay carrito)
-    # Inyectamos un script que al presionar F10 recarga con ?cobrar=1
-    if 'cobrar_auto' not in st.session_state:
-        st.session_state.cobrar_auto = False
-    
-    if st.query_params.get('cobrar') == '1':
-        st.session_state.cobrar_auto = True
-        # Limpiar parámetro para evitar bucle
-        st.query_params.pop('cobrar', None)
-    
-    st.components.v1.html(
-        """
-        <script>
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'F2') {
-                e.preventDefault();
-                const input = document.querySelector('input[aria-label="buscar_input"]');
-                if (input) input.focus();
-            }
-            if (e.key === 'F10') {
-                e.preventDefault();
-                // Recargar la página con un parámetro para indicar cobro automático
-                window.location.href = window.location.pathname + '?cobrar=1';
-            }
-        });
-        </script>
-        """,
-        height=0,
-    )
+    # ============================================
+    # BOTÓN PARA BUSCAR POR NOMBRE (POPOVER)
+    # ============================================
+    with st.popover("🔍 Buscar por nombre", use_container_width=True):
+        st.markdown("**Escribe el nombre del producto:**")
+        busqueda_nombre = st.text_input("", placeholder="Ej: Harina, Aceite, Coca...", key="buscar_nombre_popover")
+        if busqueda_nombre:
+            # Filtrar productos por nombre (coincidencia parcial)
+            resultados = []
+            for p in inventario:
+                if p['stock'] <= 0:
+                    continue
+                if busqueda_nombre.lower() in p['nombre'].lower():
+                    resultados.append(p)
+            resultados = resultados[:30]
+            
+            if resultados:
+                st.markdown("---")
+                cols_head = st.columns([3, 1, 1, 1, 0.8])
+                cols_head[0].markdown("**Producto**")
+                cols_head[1].markdown("**Stock**")
+                cols_head[2].markdown("**Precio USD**")
+                cols_head[3].markdown("**Precio Bs**")
+                cols_head[4].markdown("")
+                st.markdown("---")
+                for prod in resultados:
+                    precio_usd = float(prod['precio_detal'])
+                    precio_bs = precio_usd * tasa
+                    c1, c2, c3, c4, c5 = st.columns([3, 1, 1, 1, 0.8])
+                    c1.write(prod['nombre'])
+                    c2.write(f"{prod['stock']:.0f}")
+                    c3.write(f"${precio_usd:.2f}")
+                    c4.write(f"{precio_bs:,.2f} Bs")
+                    if c5.button("➕", key=f"pop_add_{prod['id']}"):
+                        agregar_producto(prod)
+                        st.rerun()
+            else:
+                st.info("No se encontraron productos con ese nombre.")
+        else:
+            st.info("Escribe al menos una letra para buscar.")
     
     # ============================================
-    # CARRITO MEJORADO
+    # CARRITO (igual que antes, mejorado)
     # ============================================
     st.subheader(f"🛒 Carrito - {cliente_actual['nombre']}")
     carrito = cliente_actual['carrito']
@@ -911,15 +873,14 @@ elif opcion == "🛒 PUNTO DE VENTA":
             }
             </style>
         """, unsafe_allow_html=True)
-        
         st.markdown('<div class="carrito-scroll">', unsafe_allow_html=True)
-        # Cabeceras
-        col_head = st.columns([2.5, 1, 1, 1, 0.5])
-        col_head[0].write("**Producto**")
-        col_head[1].write("**Precio USD**")
-        col_head[2].write("**Precio Bs**")
-        col_head[3].write("**Cantidad**")
-        col_head[4].write("**Eliminar**")
+        
+        cols_head = st.columns([2.5, 1, 1, 1, 0.5])
+        cols_head[0].write("**Producto**")
+        cols_head[1].write("**Precio USD**")
+        cols_head[2].write("**Precio Bs**")
+        cols_head[3].write("**Cantidad**")
+        cols_head[4].write("**Eliminar**")
         st.markdown("---")
         
         total_venta_usd = 0.0
@@ -945,7 +906,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
                     st.session_state.clientes[st.session_state.cliente_actual]['carrito'].pop(idx)
                     st.rerun()
                 else:
-                    # Recalcular precio mayorista
                     prod_data = None
                     for p in inventario:
                         if p['id'] == item['id']:
@@ -976,6 +936,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
         col_t1.markdown(f"### Total USD: ${total_venta_usd:,.2f}")
         col_t2.markdown(f"### Total Bs: {total_venta_bs:,.2f}")
         
+        # REDONDEO
         total_final_usd = total_venta_usd
         total_final_bs = total_venta_bs
         with st.expander("🔧 Ajustar monto final (redondeo)", expanded=False):
@@ -992,7 +953,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
         
         st.divider()
         
-        # SECCIÓN DE PAGOS (sin cambios)
+        # PAGOS
         with st.expander("💳 Detalle de pagos", expanded=True):
             st.markdown("**Ingresa los montos recibidos:**")
             col_p1, col_p2 = st.columns(2)
@@ -1021,82 +982,13 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 col_r3.metric("Faltante USD", f"${abs(vuelto):,.2f}", delta_color="inverse")
             st.success(f"✅ Pago suficiente. Vuelto: ${vuelto:.2f} / {(vuelto * tasa):,.2f} Bs" if vuelto >= -0.01 else f"❌ Faltante: ${abs(vuelto):,.2f} / {(abs(vuelto) * tasa):,.2f} Bs")
         
-        # BOTONES DE ACCIÓN
+        # BOTONES
         col_b1, col_b2, col_b3 = st.columns(3)
         with col_b1:
             if st.button("🔄 Limpiar carrito", use_container_width=True):
                 st.session_state.clientes[st.session_state.cliente_actual]['carrito'] = []
                 st.rerun()
         with col_b2:
-            # Verificar si el cobro es automático (por F10)
-            cobrar_automatico = st.session_state.get('cobrar_auto', False)
-            if cobrar_automatico:
-                st.session_state.cobrar_auto = False
-                # Si el carrito está vacío o el vuelto es insuficiente, no cobrar
-                if not (vuelto >= -0.01 and carrito):
-                    st.warning("No se puede cobrar: carrito vacío o pago insuficiente")
-                else:
-                    # Ejecutar cobro automático
-                    try:
-                        items_res = [f"{item['cantidad']:.0f}x {item['nombre']}" for item in carrito]
-                        for item in carrito:
-                            stock_actual = db.table("inventario").select("stock").eq("id", item['id']).execute().data[0]['stock']
-                            db.table("inventario").update({"stock": stock_actual - item['cantidad']}).eq("id", item['id']).execute()
-                        info_cli = f" - Cliente: {cliente_actual.get('cliente', '')}" if cliente_actual.get('cliente') else ""
-                        venta = {
-                            "id_cierre": id_turno,
-                            "producto": ", ".join(items_res),
-                            "cantidad": len(carrito),
-                            "total_usd": round(total_final_usd, 2),
-                            "monto_cobrado_bs": round(total_final_bs, 2),
-                            "tasa_cambio": tasa,
-                            "pago_divisas": round(p_usd_ef, 2),
-                            "pago_zelle": round(p_zelle, 2),
-                            "pago_otros": round(p_otros_usd, 2),
-                            "pago_efectivo": round(p_bs_ef, 2),
-                            "pago_movil": round(p_movil, 2),
-                            "pago_punto": round(p_punto, 2),
-                            "costo_venta": round(total_costo, 2),
-                            "estado": "Finalizado",
-                            "items": json.dumps(carrito),
-                            "id_transaccion": str(int(datetime.now().timestamp())),
-                            "fecha": datetime.now().isoformat(),
-                            "cliente": cliente_actual.get('cliente', '') or f"{cliente_actual['nombre']}"
-                        }
-                        db.table("ventas").insert(venta).execute()
-                        st.balloons()
-                        st.success(f"✅ Venta registrada - {cliente_actual['nombre']}{info_cli}")
-                        
-                        @st.dialog("🧾 Ticket de Venta")
-                        def ticket():
-                            st.markdown("### BODEGÓN VYM")
-                            st.write(f"**Fecha:** {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-                            st.write(f"**Turno:** #{id_turno} | **Cliente:** {cliente_actual['nombre']}{info_cli}")
-                            st.write(f"**Cajero:** {st.session_state.usuario_actual['nombre']}")
-                            st.divider()
-                            df_ticket = pd.DataFrame([{
-                                "Cant": f"{item['cantidad']:.0f}",
-                                "Producto": item['nombre'],
-                                "Precio USD": f"${item['precio']:.2f}",
-                                "Subtotal USD": f"${item['subtotal']:.2f}",
-                                "Subtotal Bs": f"{item['subtotal'] * tasa:,.2f}"
-                            } for item in carrito])
-                            st.dataframe(df_ticket, use_container_width=True, hide_index=True)
-                            st.divider()
-                            col1, col2 = st.columns(2)
-                            col1.metric("Total USD", f"${total_final_usd:,.2f}")
-                            col2.metric("Total Bs", f"{total_final_bs:,.2f} Bs")
-                            st.metric("Vuelto", f"${vuelto:.2f} USD / {(vuelto * tasa):,.2f} Bs")
-                            if st.button("Cerrar ticket", use_container_width=True):
-                                st.rerun()
-                        ticket()
-                        st.session_state.clientes[st.session_state.cliente_actual]['carrito'] = []
-                        st.session_state.clientes[st.session_state.cliente_actual]['cliente'] = ''
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-            
-            # Botón normal de cobro
             if st.button("✅ Cobrar y cerrar cuenta", type="primary", use_container_width=True, disabled=not (vuelto >= -0.01 and carrito)):
                 try:
                     items_res = [f"{item['cantidad']:.0f}x {item['nombre']}" for item in carrito]
