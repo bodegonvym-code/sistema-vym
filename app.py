@@ -603,7 +603,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA (CARRITO CON DATA_EDITOR + ELIMINAR EN FILA)
+# MÓDULO 2: PUNTO DE VENTA (CARRITO SIMPLIFICADO + BUSCADOR LIMPIO)
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -621,7 +621,9 @@ elif opcion == "🛒 PUNTO DE VENTA":
         </div>
     """, unsafe_allow_html=True)
     
+    # ============================================
     # SISTEMA DE CLIENTES
+    # ============================================
     if 'clientes' not in st.session_state:
         st.session_state.clientes = {
             'cliente_1': {'nombre': 'Cliente 1', 'carrito': [], 'activa': True, 'cliente': ''},
@@ -669,7 +671,9 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 st.session_state.clientes[st.session_state.cliente_actual]['carrito'] = []
                 st.rerun()
     
+    # ============================================
     # CACHE DEL INVENTARIO
+    # ============================================
     @st.cache_data(ttl=60, show_spinner=False)
     def cargar_inventario():
         try:
@@ -684,13 +688,17 @@ elif opcion == "🛒 PUNTO DE VENTA":
         st.warning("No se pudo cargar el inventario. Verifica la conexión.")
         st.stop()
     
-    # FUNCIÓN PARA AGREGAR PRODUCTO
+    # ============================================
+    # FUNCIÓN PARA AGREGAR PRODUCTO (CON RECÁLCULO DE PRECIO)
+    # ============================================
     def agregar_producto(prod):
         carrito = st.session_state.clientes[st.session_state.cliente_actual]['carrito']
         encontrado = False
         for item in carrito:
             if item['id'] == prod['id']:
+                # Incrementar cantidad
                 nueva_cant = item['cantidad'] + 1
+                # Recalcular precio según nueva cantidad
                 if nueva_cant >= prod['min_mayor']:
                     nuevo_precio = float(prod['precio_mayor'])
                     tipo_precio = " (Mayor)"
@@ -722,7 +730,9 @@ elif opcion == "🛒 PUNTO DE VENTA":
             })
         st.rerun()
     
-    # CAMPO PRINCIPAL PARA CÓDIGO DE BARRAS
+    # ============================================
+    # CAMPO PRINCIPAL PARA CÓDIGO DE BARRAS (con clear_on_submit)
+    # ============================================
     st.markdown("""
         <style>
         .stForm > div:first-child > div:last-child {
@@ -768,10 +778,20 @@ elif opcion == "🛒 PUNTO DE VENTA":
         else:
             st.warning(f"Código '{codigo}' no encontrado o sin stock.")
     
-    # BUSCADOR POR NOMBRE EN POPOVER (con limpieza automática)
+    # ============================================
+    # BUSCADOR POR NOMBRE EN POPOVER (SIEMPRE LIMPIO)
+    # ============================================
+    # Contador para generar clave única cada vez que se abre el popover
+    if 'popover_counter' not in st.session_state:
+        st.session_state.popover_counter = 0
+    
     with st.popover("🔍 Buscar por nombre", use_container_width=True):
+        # Incrementar contador para clave nueva (campo vacío)
+        st.session_state.popover_counter += 1
+        key_busqueda = f"buscar_nombre_{st.session_state.popover_counter}"
+        
         st.markdown("**Escribe el nombre del producto:**")
-        busqueda = st.text_input("", key="buscar_nombre_pop", placeholder="Ej: Harina, Aceite...", label_visibility="collapsed")
+        busqueda = st.text_input("", key=key_busqueda, placeholder="Ej: Harina, Aceite...", label_visibility="collapsed")
         
         if busqueda:
             resultados = []
@@ -799,108 +819,111 @@ elif opcion == "🛒 PUNTO DE VENTA":
                     c2.write(f"{prod['stock']:.0f}")
                     c3.write(f"${precio_usd:.2f}")
                     c4.write(f"{precio_bs:,.2f} Bs")
-                    if c5.button("➕", key=f"pop_{prod['id']}"):
+                    if c5.button("➕", key=f"pop_{prod['id']}_{st.session_state.popover_counter}"):
                         agregar_producto(prod)
-                        # Limpiar el campo de búsqueda eliminando su estado
-                        if 'buscar_nombre_pop' in st.session_state:
-                            del st.session_state['buscar_nombre_pop']
+                        # El rerun cerrará el popover y la próxima vez se generará una nueva clave
                         st.rerun()
             else:
                 st.info("No se encontraron productos.")
         else:
             st.info("Escribe al menos una letra para buscar.")
     
-    # CARRITO CON DATA_EDITOR + BOTÓN ELIMINAR EN FILA
+    # ============================================
+    # CARRITO SIMPLIFICADO (5 COLUMNAS)
+    # ============================================
     st.subheader(f"🛒 Carrito - {cliente_actual['nombre']}")
     carrito = cliente_actual['carrito']
     
     if not carrito:
         st.info("Carrito vacío")
     else:
-        # Construir DataFrame para el data_editor
-        # Incluimos una columna "Eliminar" con un valor dummy que luego interpretaremos
-        data = []
-        for i, item in enumerate(carrito):
-            data.append({
-                "id": item['id'],
-                "Producto": item['nombre'],
-                "Precio USD": item['precio'],
-                "Precio Bs": item['precio'] * tasa,
-                "Cantidad": item['cantidad'],
-                "Subtotal USD": item['subtotal'],
-                "Subtotal Bs": item['subtotal'] * tasa,
-                "Eliminar": f"❌ {i}"  # valor único para el botón
-            })
+        st.markdown("""
+            <style>
+            .carrito-scroll {
+                max-height: 450px;
+                overflow-y: auto;
+                margin-bottom: 1rem;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                background-color: #fefefe;
+                padding: 0.5rem;
+            }
+            .carrito-row {
+                display: flex;
+                align-items: center;
+                padding: 0.5rem 0;
+                border-bottom: 1px solid #eee;
+            }
+            .carrito-row:hover {
+                background-color: #f9f9f9;
+            }
+            </style>
+        """, unsafe_allow_html=True)
         
-        df_carrito = pd.DataFrame(data)
+        st.markdown('<div class="carrito-scroll">', unsafe_allow_html=True)
         
-        # Usamos st.data_editor con columnas editables
-        edited_df = st.data_editor(
-            df_carrito[["Producto", "Precio USD", "Precio Bs", "Cantidad", "Subtotal USD", "Subtotal Bs", "Eliminar"]],
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Cantidad": st.column_config.NumberColumn("Cantidad", min_value=0, step=1),
-                "Eliminar": st.column_config.Column("Eliminar", width="small"),
-            },
-            disabled=["Producto", "Precio USD", "Precio Bs", "Subtotal USD", "Subtotal Bs"],
-            key="carrito_editor"
-        )
+        # Cabeceras: Producto, Precio USD, Precio Bs, Cantidad, Eliminar
+        cols_head = st.columns([3, 1, 1.2, 1, 0.5])
+        cols_head[0].write("**Producto**")
+        cols_head[1].write("**Precio USD**")
+        cols_head[2].write("**Precio Bs**")
+        cols_head[3].write("**Cantidad**")
+        cols_head[4].write("**Eliminar**")
+        st.markdown("---")
         
-        # Detectar cambios en cantidades
-        for i, row in edited_df.iterrows():
-            nueva_cant = row["Cantidad"]
-            if nueva_cant != carrito[i]['cantidad']:
+        total_venta_usd = 0.0
+        total_costo = 0.0
+        
+        # Mostrar cada producto en una fila
+        for item in carrito:
+            cols = st.columns([3, 1, 1.2, 1, 0.5])
+            cols[0].write(item['nombre'])
+            cols[1].write(f"${item['precio']:.2f}")
+            cols[2].write(f"{item['precio'] * tasa:,.2f} Bs")
+            
+            # Input de cantidad
+            nueva_cant = cols[3].number_input(
+                "",
+                min_value=0.0,
+                max_value=1000.0,
+                value=float(item['cantidad']),
+                step=1.0,
+                key=f"cant_{item['id']}",
+                label_visibility="collapsed"
+            )
+            if nueva_cant != item['cantidad']:
                 if nueva_cant == 0:
                     # Eliminar producto
-                    st.session_state.clientes[st.session_state.cliente_actual]['carrito'].pop(i)
+                    st.session_state.clientes[st.session_state.cliente_actual]['carrito'].remove(item)
                     st.rerun()
                 else:
                     # Recalcular precio mayorista
                     prod_data = None
                     for p in inventario:
-                        if p['id'] == carrito[i]['id']:
+                        if p['id'] == item['id']:
                             prod_data = p
                             break
                     if prod_data:
                         if nueva_cant >= prod_data['min_mayor']:
                             nuevo_precio = float(prod_data['precio_mayor'])
-                            tipo_precio = " (Mayor)"
                         else:
                             nuevo_precio = float(prod_data['precio_detal'])
-                            tipo_precio = ""
-                        carrito[i]['precio'] = nuevo_precio
-                        carrito[i]['tipo_precio'] = tipo_precio
-                    carrito[i]['cantidad'] = nueva_cant
-                    carrito[i]['subtotal'] = carrito[i]['cantidad'] * carrito[i]['precio']
+                        item['precio'] = nuevo_precio
+                    item['cantidad'] = nueva_cant
+                    item['subtotal'] = item['cantidad'] * item['precio']
                     st.rerun()
+            
+            # Botón eliminar
+            if cols[4].button("❌", key=f"del_{item['id']}"):
+                st.session_state.clientes[st.session_state.cliente_actual]['carrito'].remove(item)
+                st.rerun()
+            
+            total_venta_usd += item['subtotal']
+            total_costo += item['cantidad'] * item['costo']
         
-        # Detectar clics en la columna "Eliminar" (como es texto, no podemos capturar evento directamente)
-        # Para simplificar, agregamos botones de eliminar aparte (una fila por producto) pero eso ocuparía espacio.
-        # En lugar de eso, usamos un botón "Eliminar" por cada producto fuera de la tabla, pero eso también ocupa.
-        # La mejor solución: mantener el botón en la tabla usando un formato HTML con botón, pero st.data_editor no lo soporta.
-        # Como alternativa, usamos st.dataframe con columnas y luego botones aparte, pero eso ya lo tenías.
-        # Decido: dejar la tabla sin eliminar, y agregar una fila de botones debajo (una por producto) como antes.
-        # Eso ocupa espacio pero es funcional y claro.
-        # Sin embargo, el usuario pidió que el eliminar esté en cada fila para ahorrar espacio.
-        # Una solución intermedia: usar st.columns con los botones de eliminar en la misma línea que los productos? No.
-        # Lo haré con botones debajo de la tabla, pero en una sola fila horizontal con scroll si es necesario.
-        # Eso es más compacto que una fila por producto.
+        st.markdown('</div>', unsafe_allow_html=True)
         
-        # Mostrar botones de eliminar en una fila horizontal (con scroll si hay muchos)
-        st.write("**Eliminar productos:**")
-        cols_eliminar = st.columns(len(carrito))
-        for i, item in enumerate(carrito):
-            with cols_eliminar[i]:
-                if st.button(f"❌ {item['nombre'][:15]}", key=f"del_btn_{i}"):
-                    st.session_state.clientes[st.session_state.cliente_actual]['carrito'].pop(i)
-                    st.rerun()
-        
-        # Calcular totales
-        total_venta_usd = sum(item['subtotal'] for item in carrito)
         total_venta_bs = total_venta_usd * tasa
-        total_costo = sum(item['cantidad'] * item['costo'] for item in carrito)
-        
         st.divider()
         col_t1, col_t2 = st.columns(2)
         col_t1.markdown(f"### Total USD: ${total_venta_usd:,.2f}")
@@ -923,7 +946,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
         
         st.divider()
         
-        # PAGOS
+        # PAGOS (sin cambios)
         with st.expander("💳 Detalle de pagos", expanded=True):
             st.markdown("**Ingresa los montos recibidos:**")
             col_p1, col_p2 = st.columns(2)
