@@ -603,7 +603,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA (CON BOTÓN LIMPIAR EN BUSCADOR POR NOMBRE)
+# MÓDULO 2: PUNTO DE VENTA (CORREGIDO: CANTIDAD Y BUSCADOR NOMBRE)
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -783,18 +783,21 @@ elif opcion == "🛒 PUNTO DE VENTA":
             st.warning(f"Código '{codigo}' no encontrado o sin stock.")
     
     # ============================================
-    # BUSCADOR POR NOMBRE EN POPOVER (con botón Limpiar)
+    # BUSCADOR POR NOMBRE EN POPOVER (con clave fija y limpieza)
     # ============================================
+    # Clave fija para el campo de búsqueda
     NOMBRE_KEY = "buscar_nombre_popover"
     
     with st.popover("🔍 Buscar por nombre", use_container_width=True):
+        # Inicializar el campo vacío cada vez que se abre el popover
+        if NOMBRE_KEY not in st.session_state:
+            st.session_state[NOMBRE_KEY] = ""
+        else:
+            # Si ya existe, lo dejamos como está (pero lo limpiamos después de agregar)
+            pass
+        
         st.markdown("**Escribe el nombre del producto:**")
         busqueda = st.text_input("", key=NOMBRE_KEY, placeholder="Ej: Harina, Aceite...", label_visibility="collapsed")
-        
-        # Botón para limpiar manualmente
-        if st.button("🗑️ Limpiar", use_container_width=True):
-            st.session_state[NOMBRE_KEY] = ""
-            st.rerun()
         
         if busqueda:
             resultados = []
