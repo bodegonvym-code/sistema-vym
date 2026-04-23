@@ -603,7 +603,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA (CORREGIDO: BUSCADOR NOMBRE CON CLAVE ÚNICA)
+# MÓDULO 2: PUNTO DE VENTA (CON BOTÓN LIMPIAR EN BUSCADOR POR NOMBRE)
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -783,18 +783,18 @@ elif opcion == "🛒 PUNTO DE VENTA":
             st.warning(f"Código '{codigo}' no encontrado o sin stock.")
     
     # ============================================
-    # BUSCADOR POR NOMBRE EN POPOVER (CLAVE ÚNICA POR APERTURA)
+    # BUSCADOR POR NOMBRE EN POPOVER (con botón Limpiar)
     # ============================================
-    if 'popover_counter' not in st.session_state:
-        st.session_state.popover_counter = 0
+    NOMBRE_KEY = "buscar_nombre_popover"
     
     with st.popover("🔍 Buscar por nombre", use_container_width=True):
-        # Incrementar contador para generar una clave nueva (campo vacío)
-        st.session_state.popover_counter += 1
-        key_busqueda = f"buscar_nombre_{st.session_state.popover_counter}"
-        
         st.markdown("**Escribe el nombre del producto:**")
-        busqueda = st.text_input("", key=key_busqueda, placeholder="Ej: Harina, Aceite...", label_visibility="collapsed")
+        busqueda = st.text_input("", key=NOMBRE_KEY, placeholder="Ej: Harina, Aceite...", label_visibility="collapsed")
+        
+        # Botón para limpiar manualmente
+        if st.button("🗑️ Limpiar", use_container_width=True):
+            st.session_state[NOMBRE_KEY] = ""
+            st.rerun()
         
         if busqueda:
             resultados = []
@@ -822,9 +822,10 @@ elif opcion == "🛒 PUNTO DE VENTA":
                     c2.write(f"{prod['stock']:.0f}")
                     c3.write(f"${precio_usd:.2f}")
                     c4.write(f"{precio_bs:,.2f} Bs")
-                    if c5.button("➕", key=f"pop_{prod['id']}_{st.session_state.popover_counter}"):
+                    if c5.button("➕", key=f"pop_{prod['id']}"):
                         agregar_producto(prod)
-                        # El rerun cerrará el popover y la próxima vez se usará nueva clave
+                        # Limpiar el campo de búsqueda para la próxima vez
+                        st.session_state[NOMBRE_KEY] = ""
                         st.rerun()
             else:
                 st.info("No se encontraron productos.")
