@@ -603,7 +603,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA (CORREGIDO: CANTIDAD Y BUSCADOR NOMBRE)
+# MÓDULO 2: PUNTO DE VENTA (CORREGIDO: BUSCADOR NOMBRE SIEMPRE LIMPIO)
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -731,7 +731,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 "subtotal": precio_final,
                 "tipo_precio": tipo_precio
             })
-        st.session_state.carrito_version += 1  # Forzar actualización de widgets
+        st.session_state.carrito_version += 1
         st.rerun()
     
     # ============================================
@@ -783,18 +783,13 @@ elif opcion == "🛒 PUNTO DE VENTA":
             st.warning(f"Código '{codigo}' no encontrado o sin stock.")
     
     # ============================================
-    # BUSCADOR POR NOMBRE EN POPOVER (con clave fija y limpieza)
+    # BUSCADOR POR NOMBRE EN POPOVER (SIEMPRE LIMPIO AL ABRIR)
     # ============================================
-    # Clave fija para el campo de búsqueda
     NOMBRE_KEY = "buscar_nombre_popover"
     
     with st.popover("🔍 Buscar por nombre", use_container_width=True):
-        # Inicializar el campo vacío cada vez que se abre el popover
-        if NOMBRE_KEY not in st.session_state:
-            st.session_state[NOMBRE_KEY] = ""
-        else:
-            # Si ya existe, lo dejamos como está (pero lo limpiamos después de agregar)
-            pass
+        # 🔧 FORZAR CAMPO VACÍO CADA VEZ QUE SE ABRE EL POPOVER
+        st.session_state[NOMBRE_KEY] = ""
         
         st.markdown("**Escribe el nombre del producto:**")
         busqueda = st.text_input("", key=NOMBRE_KEY, placeholder="Ej: Harina, Aceite...", label_visibility="collapsed")
@@ -827,7 +822,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                     c4.write(f"{precio_bs:,.2f} Bs")
                     if c5.button("➕", key=f"pop_{prod['id']}"):
                         agregar_producto(prod)
-                        # Limpiar el campo de búsqueda para la próxima vez
+                        # Limpiar también por si acaso
                         st.session_state[NOMBRE_KEY] = ""
                         st.rerun()
             else:
@@ -836,7 +831,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
             st.info("Escribe al menos una letra para buscar.")
     
     # ============================================
-    # CARRITO SIMPLIFICADO (con versión forzada)
+    # CARRITO (sin cambios, igual al tuyo)
     # ============================================
     st.subheader(f"🛒 Carrito - {cliente_actual['nombre']}")
     carrito = cliente_actual['carrito']
