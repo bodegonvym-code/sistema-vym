@@ -603,7 +603,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA (CORREGIDO: BUSCADOR NOMBRE SIEMPRE LIMPIO)
+# MÓDULO 2: PUNTO DE VENTA (CORREGIDO: BUSCADOR NOMBRE CON CLAVE ÚNICA)
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -731,7 +731,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 "subtotal": precio_final,
                 "tipo_precio": tipo_precio
             })
-        st.session_state.carrito_version += 1
+        st.session_state.carrito_version += 1  # Forzar actualización de widgets
         st.rerun()
     
     # ============================================
@@ -783,16 +783,18 @@ elif opcion == "🛒 PUNTO DE VENTA":
             st.warning(f"Código '{codigo}' no encontrado o sin stock.")
     
     # ============================================
-    # BUSCADOR POR NOMBRE EN POPOVER (SIEMPRE LIMPIO AL ABRIR)
+    # BUSCADOR POR NOMBRE EN POPOVER (CLAVE ÚNICA POR APERTURA)
     # ============================================
-    NOMBRE_KEY = "buscar_nombre_popover"
+    if 'popover_counter' not in st.session_state:
+        st.session_state.popover_counter = 0
     
     with st.popover("🔍 Buscar por nombre", use_container_width=True):
-        # 🔧 FORZAR CAMPO VACÍO CADA VEZ QUE SE ABRE EL POPOVER
-        st.session_state[NOMBRE_KEY] = ""
+        # Incrementar contador para generar una clave nueva (campo vacío)
+        st.session_state.popover_counter += 1
+        key_busqueda = f"buscar_nombre_{st.session_state.popover_counter}"
         
         st.markdown("**Escribe el nombre del producto:**")
-        busqueda = st.text_input("", key=NOMBRE_KEY, placeholder="Ej: Harina, Aceite...", label_visibility="collapsed")
+        busqueda = st.text_input("", key=key_busqueda, placeholder="Ej: Harina, Aceite...", label_visibility="collapsed")
         
         if busqueda:
             resultados = []
@@ -820,10 +822,9 @@ elif opcion == "🛒 PUNTO DE VENTA":
                     c2.write(f"{prod['stock']:.0f}")
                     c3.write(f"${precio_usd:.2f}")
                     c4.write(f"{precio_bs:,.2f} Bs")
-                    if c5.button("➕", key=f"pop_{prod['id']}"):
+                    if c5.button("➕", key=f"pop_{prod['id']}_{st.session_state.popover_counter}"):
                         agregar_producto(prod)
-                        # Limpiar también por si acaso
-                        st.session_state[NOMBRE_KEY] = ""
+                        # El rerun cerrará el popover y la próxima vez se usará nueva clave
                         st.rerun()
             else:
                 st.info("No se encontraron productos.")
@@ -831,7 +832,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
             st.info("Escribe al menos una letra para buscar.")
     
     # ============================================
-    # CARRITO (sin cambios, igual al tuyo)
+    # CARRITO SIMPLIFICADO (con versión forzada)
     # ============================================
     st.subheader(f"🛒 Carrito - {cliente_actual['nombre']}")
     carrito = cliente_actual['carrito']
