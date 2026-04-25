@@ -1127,6 +1127,18 @@ elif opcion == "📜 HISTORIAL":
     """, unsafe_allow_html=True)
     
     # ============================================
+    # INICIALIZAR ESTADO DE FILTROS
+    # ============================================
+    if 'filtros_historial' not in st.session_state:
+        st.session_state.filtros_historial = {
+            'fecha_desde': None,
+            'fecha_hasta': None,
+            'turno_filtro': 0,
+            'estado_filtro': "Todos",
+            'buscar_texto': ""
+        }
+    
+    # ============================================
     # FILTROS (dentro de un formulario para controlar la búsqueda)
     # ============================================
     st.subheader("🔍 Filtrar ventas")
@@ -1134,51 +1146,54 @@ elif opcion == "📜 HISTORIAL":
     with st.form(key="filtros_historial"):
         col_f1, col_f2 = st.columns(2)
         with col_f1:
-            fecha_desde = st.date_input("📅 Desde", value=None, key="hist_desde")
-            turno_filtro = st.number_input("🔢 Número de turno", min_value=0, value=0, step=1, key="filtro_turno")
+            fecha_desde = st.date_input("📅 Desde", value=st.session_state.filtros_historial['fecha_desde'], key="hist_desde")
+            turno_filtro = st.number_input("🔢 Número de turno", min_value=0, value=st.session_state.filtros_historial['turno_filtro'], step=1, key="filtro_turno")
         with col_f2:
-            fecha_hasta = st.date_input("📅 Hasta", value=None, key="hist_hasta")
-            estado_filtro = st.selectbox("Estado", ["Todos", "Finalizado", "Anulado"], key="filtro_estado")
+            fecha_hasta = st.date_input("📅 Hasta", value=st.session_state.filtros_historial['fecha_hasta'], key="hist_hasta")
+            estado_filtro = st.selectbox("Estado", ["Todos", "Finalizado", "Anulado"], index=["Todos", "Finalizado", "Anulado"].index(st.session_state.filtros_historial['estado_filtro']), key="filtro_estado")
         
-        buscar_texto = st.text_input("🔍 Buscar producto", placeholder="Ej: Ron...", key="filtro_buscar")
+        buscar_texto = st.text_input("🔍 Buscar producto", value=st.session_state.filtros_historial['buscar_texto'], placeholder="Ej: Ron...", key="filtro_buscar")
         
         submitted = st.form_submit_button("🔍 Buscar", use_container_width=True)
     
-    # Solo realizar la consulta cuando se presiona el botón "Buscar"
     if submitted:
-        # Construir la consulta base
-        query = db.table("ventas").select("*").order("fecha", desc=True)
-        
-        # Aplicar filtros de fecha si están presentes
-        if fecha_desde:
-            fecha_desde_str = fecha_desde.strftime("%Y-%m-%d")
-            query = query.gte("fecha", fecha_desde_str)
-        if fecha_hasta:
-            fecha_hasta_str = fecha_hasta.strftime("%Y-%m-%d")
-            query = query.lte("fecha", fecha_hasta_str)
-        
-        # Filtro por turno
-        if turno_filtro > 0:
-            query = query.eq("id_cierre", turno_filtro)
-        
-        # Filtro por estado
-        if estado_filtro != "Todos":
-            query = query.eq("estado", estado_filtro)
-        
-        # Filtro por producto (búsqueda en columna "producto")
-        if buscar_texto:
-            query = query.ilike("producto", f"%{buscar_texto}%")
-        
-        # Ejecutar consulta
-        try:
-            response = query.execute()
-            df = pd.DataFrame(response.data) if response.data else pd.DataFrame()
-        except Exception as e:
-            st.error(f"Error al cargar ventas: {e}")
-            df = pd.DataFrame()
-    else:
-        # Si aún no se ha buscado, mostrar un mensaje y un DataFrame vacío
-        st.info("Utilice los filtros y presione 'Buscar' para ver las ventas.")
+        # Guardar filtros en session_state
+        st.session_state.filtros_historial = {
+            'fecha_desde': fecha_desde,
+            'fecha_hasta': fecha_hasta,
+            'turno_filtro': turno_filtro,
+            'estado_filtro': estado_filtro,
+            'buscar_texto': buscar_texto
+        }
+        # Recargar para aplicar filtros
+        st.rerun()
+    
+    # ============================================
+    # APLICAR FILTROS GUARDADOS Y CONSULTAR
+    # ============================================
+    filtros = st.session_state.filtros_historial
+    
+    # Construir la consulta base
+    query = db.table("ventas").select("*").order("fecha", desc=True)
+    
+    if filtros['fecha_desde']:
+        fecha_desde_str = filtros['fecha_desde'].strftime("%Y-%m-%d")
+        query = query.gte("fecha", fecha_desde_str)
+    if filtros['fecha_hasta']:
+        fecha_hasta_str = filtros['fecha_hasta'].strftime("%Y-%m-%d")
+        query = query.lte("fecha", fecha_hasta_str)
+    if filtros['turno_filtro'] > 0:
+        query = query.eq("id_cierre", filtros['turno_filtro'])
+    if filtros['estado_filtro'] != "Todos":
+        query = query.eq("estado", filtros['estado_filtro'])
+    if filtros['buscar_texto']:
+        query = query.ilike("producto", f"%{filtros['buscar_texto']}%")
+    
+    try:
+        response = query.execute()
+        df = pd.DataFrame(response.data) if response.data else pd.DataFrame()
+    except Exception as e:
+        st.error(f"Error al cargar ventas: {e}")
         df = pd.DataFrame()
     
     # ============================================
@@ -1191,42 +1206,35 @@ elif opcion == "📜 HISTORIAL":
         df['fecha_corta'] = df['fecha_dt'].dt.strftime('%d/%m/%Y')
         df['fecha_display'] = df['fecha_dt'].dt.strftime('%d/%m/%Y %H:%M')
         
-        # Función para formatear el tipo de pago (resumen legible)
         def formatear_pago(venta):
             pagos = []
-            # Pagos en USD
             if venta.get('pago_divisas', 0) > 0:
                 pagos.append(f"Efectivo USD ${venta['pago_divisas']:.2f}")
             if venta.get('pago_zelle', 0) > 0:
                 pagos.append(f"Zelle ${venta['pago_zelle']:.2f}")
             if venta.get('pago_otros', 0) > 0:
                 pagos.append(f"Otros USD ${venta['pago_otros']:.2f}")
-            # Pagos en Bs
             if venta.get('pago_efectivo', 0) > 0:
                 pagos.append(f"Efectivo Bs {venta['pago_efectivo']:,.0f}")
             if venta.get('pago_movil', 0) > 0:
                 pagos.append(f"Pago Móvil Bs {venta['pago_movil']:,.0f}")
             if venta.get('pago_punto', 0) > 0:
                 pagos.append(f"Punto Bs {venta['pago_punto']:,.0f}")
-            
             if not pagos:
                 return "No registrado"
             elif len(pagos) == 1:
                 return pagos[0]
             else:
-                # Si hay múltiples, mostrar "Mixto: " + el primero y un resumen
                 return f"Mixto: {', '.join(pagos[:2])}" + (f" +{len(pagos)-2} más" if len(pagos) > 2 else "")
         
         df['tipo_pago'] = df.apply(formatear_pago, axis=1)
         
-        # Calcular totales (solo ventas no anuladas)
         df_activas = df[df['estado'] != 'Anulado']
         total_usd = df_activas['total_usd'].sum() if not df_activas.empty else 0
         total_bs = df_activas['monto_cobrado_bs'].sum() if not df_activas.empty else 0
         cantidad_ventas = len(df_activas)
         promedio_usd = total_usd / cantidad_ventas if cantidad_ventas > 0 else 0
         
-        # Tarjetas de resumen
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         with col_m1:
             st.markdown(f"""
@@ -1273,7 +1281,6 @@ elif opcion == "📜 HISTORIAL":
             </style>
         """, unsafe_allow_html=True)
         
-        # Cabeceras de la tabla (agregamos columna para Tipo de Pago)
         col_h1, col_h2, col_h3, col_h4, col_h5, col_h6, col_h7, col_h8, col_h9 = st.columns([0.6, 0.8, 0.8, 2.2, 1.0, 1.0, 1.5, 0.8, 0.8])
         col_h1.markdown("**Turno**")
         col_h2.markdown("**ID**")
@@ -1349,10 +1356,9 @@ elif opcion == "📜 HISTORIAL":
                     </div>
                 </div>
             """, unsafe_allow_html=True)
-    elif submitted:
-        # Si se buscó y no hay datos
+    else:
+        # Si no hay resultados, mostrar mensaje
         st.info("📭 No hay ventas que coincidan con los filtros seleccionados.")
-    # Si no se ha buscado aún, no mostramos nada (el mensaje ya está arriba)
 
 # ============================================
 # MÓDULO 5: CIERRE DE CAJA
