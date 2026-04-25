@@ -1127,66 +1127,61 @@ elif opcion == "📜 HISTORIAL":
     """, unsafe_allow_html=True)
     
     # ============================================
-    # INICIALIZAR ESTADO DE FILTROS
+    # INICIALIZAR ESTADO DE FILTROS (PERSISTENTES)
     # ============================================
-    if 'filtros_historial' not in st.session_state:
-        st.session_state.filtros_historial = {
+    if 'historial_filtros' not in st.session_state:
+        st.session_state.historial_filtros = {
             'fecha_desde': None,
             'fecha_hasta': None,
-            'turno_filtro': 0,
-            'estado_filtro': "Todos",
-            'buscar_texto': ""
+            'turno': 0,
+            'estado': "Todos",
+            'buscar': ""
         }
     
     # ============================================
-    # FILTROS (dentro de un formulario)
+    # FORMULARIO DE FILTROS
     # ============================================
     st.subheader("🔍 Filtrar ventas")
-    
     with st.form(key="filtros_historial"):
         col_f1, col_f2 = st.columns(2)
         with col_f1:
-            fecha_desde = st.date_input("📅 Desde", value=st.session_state.filtros_historial['fecha_desde'], key="hist_desde")
-            turno_filtro = st.number_input("🔢 Número de turno", min_value=0, value=st.session_state.filtros_historial['turno_filtro'], step=1, key="filtro_turno")
+            fecha_desde = st.date_input("📅 Desde", value=st.session_state.historial_filtros['fecha_desde'], key="hist_desde")
+            turno_filtro = st.number_input("🔢 Número de turno", min_value=0, value=st.session_state.historial_filtros['turno'], step=1, key="filtro_turno")
         with col_f2:
-            fecha_hasta = st.date_input("📅 Hasta", value=st.session_state.filtros_historial['fecha_hasta'], key="hist_hasta")
-            estado_filtro = st.selectbox("Estado", ["Todos", "Finalizado", "Anulado"], index=["Todos", "Finalizado", "Anulado"].index(st.session_state.filtros_historial['estado_filtro']), key="filtro_estado")
+            fecha_hasta = st.date_input("📅 Hasta", value=st.session_state.historial_filtros['fecha_hasta'], key="hist_hasta")
+            estado_filtro = st.selectbox("Estado", ["Todos", "Finalizado", "Anulado"], index=["Todos", "Finalizado", "Anulado"].index(st.session_state.historial_filtros['estado']), key="filtro_estado")
         
-        buscar_texto = st.text_input("🔍 Buscar producto", value=st.session_state.filtros_historial['buscar_texto'], placeholder="Ej: Ron...", key="filtro_buscar")
+        buscar_texto = st.text_input("🔍 Buscar producto", value=st.session_state.historial_filtros['buscar'], placeholder="Ej: Ron...", key="filtro_buscar")
         
         submitted = st.form_submit_button("🔍 Buscar", use_container_width=True)
     
+    # Actualizar filtros si se presionó el botón
     if submitted:
-        # Guardar filtros en session_state
-        st.session_state.filtros_historial = {
+        st.session_state.historial_filtros = {
             'fecha_desde': fecha_desde,
             'fecha_hasta': fecha_hasta,
-            'turno_filtro': turno_filtro,
-            'estado_filtro': estado_filtro,
-            'buscar_texto': buscar_texto
+            'turno': turno_filtro,
+            'estado': estado_filtro,
+            'buscar': buscar_texto
         }
-        # No hacemos rerun, dejamos que se ejecute la consulta a continuación
+        st.rerun()
     
     # ============================================
-    # APLICAR FILTROS GUARDADOS Y CONSULTAR
+    # CONSULTAR VENTAS CON LOS FILTROS GUARDADOS
     # ============================================
-    filtros = st.session_state.filtros_historial
-    
-    # Construir consulta base
+    filtros = st.session_state.historial_filtros
     query = db.table("ventas").select("*").order("fecha", desc=True)
     
-    if filtros['fecha_desde'] is not None:
-        fecha_desde_str = filtros['fecha_desde'].strftime("%Y-%m-%d")
-        query = query.gte("fecha", fecha_desde_str)
-    if filtros['fecha_hasta'] is not None:
-        fecha_hasta_str = filtros['fecha_hasta'].strftime("%Y-%m-%d")
-        query = query.lte("fecha", fecha_hasta_str)
-    if filtros['turno_filtro'] > 0:
-        query = query.eq("id_cierre", filtros['turno_filtro'])
-    if filtros['estado_filtro'] != "Todos":
-        query = query.eq("estado", filtros['estado_filtro'])
-    if filtros['buscar_texto']:
-        query = query.ilike("producto", f"%{filtros['buscar_texto']}%")
+    if filtros['fecha_desde']:
+        query = query.gte("fecha", filtros['fecha_desde'].strftime("%Y-%m-%d"))
+    if filtros['fecha_hasta']:
+        query = query.lte("fecha", filtros['fecha_hasta'].strftime("%Y-%m-%d"))
+    if filtros['turno'] > 0:
+        query = query.eq("id_cierre", filtros['turno'])
+    if filtros['estado'] != "Todos":
+        query = query.eq("estado", filtros['estado'])
+    if filtros['buscar']:
+        query = query.ilike("producto", f"%{filtros['buscar']}%")
     
     try:
         response = query.execute()
@@ -1196,16 +1191,13 @@ elif opcion == "📜 HISTORIAL":
         df = pd.DataFrame()
     
     # ============================================
-    # PROCESAMIENTO Y VISUALIZACIÓN DE RESULTADOS
+    # PROCESAMIENTO Y VISUALIZACIÓN
     # ============================================
     if not df.empty:
-        # Agregar columnas de fecha/hora
         df['fecha_dt'] = pd.to_datetime(df['fecha'])
         df['hora'] = df['fecha_dt'].dt.strftime('%H:%M')
         df['fecha_corta'] = df['fecha_dt'].dt.strftime('%d/%m/%Y')
-        df['fecha_display'] = df['fecha_dt'].dt.strftime('%d/%m/%Y %H:%M')
         
-        # Función para formatear el tipo de pago
         def formatear_pago(venta):
             pagos = []
             if venta.get('pago_divisas', 0) > 0:
@@ -1222,21 +1214,17 @@ elif opcion == "📜 HISTORIAL":
                 pagos.append(f"Punto Bs {venta['pago_punto']:,.0f}")
             if not pagos:
                 return "No registrado"
-            elif len(pagos) == 1:
-                return pagos[0]
-            else:
-                return f"Mixto: {', '.join(pagos[:2])}" + (f" +{len(pagos)-2} más" if len(pagos) > 2 else "")
+            return pagos[0] if len(pagos) == 1 else f"Mixto: {', '.join(pagos[:2])}"
         
         df['tipo_pago'] = df.apply(formatear_pago, axis=1)
         
-        # Calcular totales (solo ventas no anuladas)
         df_activas = df[df['estado'] != 'Anulado']
         total_usd = df_activas['total_usd'].sum() if not df_activas.empty else 0
         total_bs = df_activas['monto_cobrado_bs'].sum() if not df_activas.empty else 0
         cantidad_ventas = len(df_activas)
         promedio_usd = total_usd / cantidad_ventas if cantidad_ventas > 0 else 0
         
-        # Tarjetas de resumen
+        # Tarjetas resumen
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         with col_m1:
             st.markdown(f"""
@@ -1272,18 +1260,8 @@ elif opcion == "📜 HISTORIAL":
             """, unsafe_allow_html=True)
         
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("""
-            <style>
-            .venta-row { display: flex; align-items: center; padding: 0.8rem; margin: 0.2rem 0; border-radius: 8px; transition: all 0.2s; }
-            .venta-row:hover { transform: translateX(5px); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-            .venta-finalizada { background-color: #ffffff; border-left: 4px solid #28a745; }
-            .venta-anulada { background-color: #f8f9fa; border-left: 4px solid #dc3545; opacity: 0.7; }
-            .badge-finalizada { background-color: #28a745; color: white; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.7rem; font-weight: 600; }
-            .badge-anulada { background-color: #dc3545; color: white; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.7rem; font-weight: 600; }
-            </style>
-        """, unsafe_allow_html=True)
         
-        # Cabeceras de la tabla (con columna Tipo de Pago)
+        # Cabeceras de la tabla
         col_h1, col_h2, col_h3, col_h4, col_h5, col_h6, col_h7, col_h8, col_h9 = st.columns([0.6, 0.8, 0.8, 2.2, 1.0, 1.0, 1.5, 0.8, 0.8])
         col_h1.markdown("**Turno**")
         col_h2.markdown("**ID**")
@@ -1299,9 +1277,7 @@ elif opcion == "📜 HISTORIAL":
         for idx, venta in df.iterrows():
             es_anulado = venta['estado'] == 'Anulado'
             badge = '<span class="badge-anulada">ANULADA</span>' if es_anulado else '<span class="badge-finalizada">FINALIZADA</span>'
-            productos = venta['producto']
-            if len(productos) > 35:
-                productos = productos[:35] + "..."
+            productos = venta['producto'][:35] + "..." if len(venta['producto']) > 35 else venta['producto']
             
             cols = st.columns([0.6, 0.8, 0.8, 2.2, 1.0, 1.0, 1.5, 0.8, 0.8])
             with cols[0]:
@@ -1360,7 +1336,7 @@ elif opcion == "📜 HISTORIAL":
                 </div>
             """, unsafe_allow_html=True)
     else:
-        # Si no hay resultados, mostrar mensaje
+        # No hay ventas con los filtros actuales
         st.info("📭 No hay ventas que coincidan con los filtros seleccionados.")
 
 # ============================================
