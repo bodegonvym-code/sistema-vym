@@ -1126,63 +1126,67 @@ elif opcion == "📜 HISTORIAL":
         </div>
     """, unsafe_allow_html=True)
     
-    # Inicializar filtros en session_state (si no existen)
-    if 'historial_filtros' not in st.session_state:
-        st.session_state.historial_filtros = {
+    # ============================================
+    # INICIALIZAR ESTADO DE FILTROS
+    # ============================================
+    if 'filtros_historial' not in st.session_state:
+        st.session_state.filtros_historial = {
             'fecha_desde': None,
             'fecha_hasta': None,
-            'turno': 0,
-            'estado': "Todos",
-            'buscar': ""
+            'turno_filtro': 0,
+            'estado_filtro': "Todos",
+            'buscar_texto': ""
         }
     
     # ============================================
-    # FORMULARIO DE FILTROS (sin usar value para evitar conflictos)
+    # FILTROS (dentro de un formulario)
     # ============================================
     st.subheader("🔍 Filtrar ventas")
     
     with st.form(key="filtros_historial"):
         col_f1, col_f2 = st.columns(2)
         with col_f1:
-            fecha_desde = st.date_input("📅 Desde", value=None, key="hist_desde")
-            turno_filtro = st.number_input("🔢 Número de turno", min_value=0, value=0, step=1, key="filtro_turno")
+            fecha_desde = st.date_input("📅 Desde", value=st.session_state.filtros_historial['fecha_desde'], key="hist_desde")
+            turno_filtro = st.number_input("🔢 Número de turno", min_value=0, value=st.session_state.filtros_historial['turno_filtro'], step=1, key="filtro_turno")
         with col_f2:
-            fecha_hasta = st.date_input("📅 Hasta", value=None, key="hist_hasta")
-            estado_filtro = st.selectbox("Estado", ["Todos", "Finalizado", "Anulado"], key="filtro_estado")
+            fecha_hasta = st.date_input("📅 Hasta", value=st.session_state.filtros_historial['fecha_hasta'], key="hist_hasta")
+            estado_filtro = st.selectbox("Estado", ["Todos", "Finalizado", "Anulado"], index=["Todos", "Finalizado", "Anulado"].index(st.session_state.filtros_historial['estado_filtro']), key="filtro_estado")
         
-        buscar_texto = st.text_input("🔍 Buscar producto", placeholder="Ej: Ron...", key="filtro_buscar")
+        buscar_texto = st.text_input("🔍 Buscar producto", value=st.session_state.filtros_historial['buscar_texto'], placeholder="Ej: Ron...", key="filtro_buscar")
         
         submitted = st.form_submit_button("🔍 Buscar", use_container_width=True)
     
-    # Si se presiona el botón, guardamos los filtros en session_state
     if submitted:
-        st.session_state.historial_filtros = {
+        # Guardar filtros en session_state
+        st.session_state.filtros_historial = {
             'fecha_desde': fecha_desde,
             'fecha_hasta': fecha_hasta,
-            'turno': turno_filtro,
-            'estado': estado_filtro,
-            'buscar': buscar_texto
+            'turno_filtro': turno_filtro,
+            'estado_filtro': estado_filtro,
+            'buscar_texto': buscar_texto
         }
-        # No hacemos rerun aquí, se procesa a continuación
+        # No hacemos rerun, dejamos que se ejecute la consulta a continuación
     
     # ============================================
     # APLICAR FILTROS GUARDADOS Y CONSULTAR
     # ============================================
-    filtros = st.session_state.historial_filtros
+    filtros = st.session_state.filtros_historial
+    
+    # Construir consulta base
     query = db.table("ventas").select("*").order("fecha", desc=True)
     
-    if filtros['fecha_desde']:
+    if filtros['fecha_desde'] is not None:
         fecha_desde_str = filtros['fecha_desde'].strftime("%Y-%m-%d")
         query = query.gte("fecha", fecha_desde_str)
-    if filtros['fecha_hasta']:
+    if filtros['fecha_hasta'] is not None:
         fecha_hasta_str = filtros['fecha_hasta'].strftime("%Y-%m-%d")
         query = query.lte("fecha", fecha_hasta_str)
-    if filtros['turno'] > 0:
-        query = query.eq("id_cierre", filtros['turno'])
-    if filtros['estado'] != "Todos":
-        query = query.eq("estado", filtros['estado'])
-    if filtros['buscar']:
-        query = query.ilike("producto", f"%{filtros['buscar']}%")
+    if filtros['turno_filtro'] > 0:
+        query = query.eq("id_cierre", filtros['turno_filtro'])
+    if filtros['estado_filtro'] != "Todos":
+        query = query.eq("estado", filtros['estado_filtro'])
+    if filtros['buscar_texto']:
+        query = query.ilike("producto", f"%{filtros['buscar_texto']}%")
     
     try:
         response = query.execute()
@@ -1192,13 +1196,172 @@ elif opcion == "📜 HISTORIAL":
         df = pd.DataFrame()
     
     # ============================================
-    # PROCESAMIENTO Y VISUALIZACIÓN DE RESULTADOS (igual que antes)
+    # PROCESAMIENTO Y VISUALIZACIÓN DE RESULTADOS
     # ============================================
     if not df.empty:
-        # ... (todo el código de procesamiento y visualización permanece igual) ...
-        # (desde aquí hasta el final usas el df)
-        # Es el mismo código que tenías, solo cambia la parte de filtros arriba.
-        # Para no repetir innecesariamente, usaré el código que ya funcionaba.
+        # Agregar columnas de fecha/hora
+        df['fecha_dt'] = pd.to_datetime(df['fecha'])
+        df['hora'] = df['fecha_dt'].dt.strftime('%H:%M')
+        df['fecha_corta'] = df['fecha_dt'].dt.strftime('%d/%m/%Y')
+        df['fecha_display'] = df['fecha_dt'].dt.strftime('%d/%m/%Y %H:%M')
+        
+        # Función para formatear el tipo de pago
+        def formatear_pago(venta):
+            pagos = []
+            if venta.get('pago_divisas', 0) > 0:
+                pagos.append(f"Efectivo USD ${venta['pago_divisas']:.2f}")
+            if venta.get('pago_zelle', 0) > 0:
+                pagos.append(f"Zelle ${venta['pago_zelle']:.2f}")
+            if venta.get('pago_otros', 0) > 0:
+                pagos.append(f"Otros USD ${venta['pago_otros']:.2f}")
+            if venta.get('pago_efectivo', 0) > 0:
+                pagos.append(f"Efectivo Bs {venta['pago_efectivo']:,.0f}")
+            if venta.get('pago_movil', 0) > 0:
+                pagos.append(f"Pago Móvil Bs {venta['pago_movil']:,.0f}")
+            if venta.get('pago_punto', 0) > 0:
+                pagos.append(f"Punto Bs {venta['pago_punto']:,.0f}")
+            if not pagos:
+                return "No registrado"
+            elif len(pagos) == 1:
+                return pagos[0]
+            else:
+                return f"Mixto: {', '.join(pagos[:2])}" + (f" +{len(pagos)-2} más" if len(pagos) > 2 else "")
+        
+        df['tipo_pago'] = df.apply(formatear_pago, axis=1)
+        
+        # Calcular totales (solo ventas no anuladas)
+        df_activas = df[df['estado'] != 'Anulado']
+        total_usd = df_activas['total_usd'].sum() if not df_activas.empty else 0
+        total_bs = df_activas['monto_cobrado_bs'].sum() if not df_activas.empty else 0
+        cantidad_ventas = len(df_activas)
+        promedio_usd = total_usd / cantidad_ventas if cantidad_ventas > 0 else 0
+        
+        # Tarjetas de resumen
+        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+        with col_m1:
+            st.markdown(f"""
+                <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                        padding: 1rem; border-radius: 10px; color: white; text-align: center;'>
+                    <span style='font-size: 0.9rem; opacity: 0.9;'>💰 TOTAL USD</span><br>
+                    <span style='font-size: 1.8rem; font-weight: 700;'>${total_usd:,.2f}</span>
+                </div>
+            """, unsafe_allow_html=True)
+        with col_m2:
+            st.markdown(f"""
+                <div style='background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
+                        padding: 1rem; border-radius: 10px; color: white; text-align: center;'>
+                    <span style='font-size: 0.9rem; opacity: 0.9;'>💵 TOTAL BS</span><br>
+                    <span style='font-size: 1.8rem; font-weight: 700;'>{total_bs:,.0f}</span>
+                </div>
+            """, unsafe_allow_html=True)
+        with col_m3:
+            st.markdown(f"""
+                <div style='background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); 
+                        padding: 1rem; border-radius: 10px; color: white; text-align: center;'>
+                    <span style='font-size: 0.9rem; opacity: 0.9;'>📊 VENTAS</span><br>
+                    <span style='font-size: 1.8rem; font-weight: 700;'>{cantidad_ventas}</span>
+                </div>
+            """, unsafe_allow_html=True)
+        with col_m4:
+            st.markdown(f"""
+                <div style='background: linear-gradient(135deg, #5f2c82 0%, #49a09d 100%); 
+                        padding: 1rem; border-radius: 10px; color: white; text-align: center;'>
+                    <span style='font-size: 0.9rem; opacity: 0.9;'>📈 PROMEDIO</span><br>
+                    <span style='font-size: 1.8rem; font-weight: 700;'>${promedio_usd:,.2f}</span>
+                </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("""
+            <style>
+            .venta-row { display: flex; align-items: center; padding: 0.8rem; margin: 0.2rem 0; border-radius: 8px; transition: all 0.2s; }
+            .venta-row:hover { transform: translateX(5px); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+            .venta-finalizada { background-color: #ffffff; border-left: 4px solid #28a745; }
+            .venta-anulada { background-color: #f8f9fa; border-left: 4px solid #dc3545; opacity: 0.7; }
+            .badge-finalizada { background-color: #28a745; color: white; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.7rem; font-weight: 600; }
+            .badge-anulada { background-color: #dc3545; color: white; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.7rem; font-weight: 600; }
+            </style>
+        """, unsafe_allow_html=True)
+        
+        # Cabeceras de la tabla (con columna Tipo de Pago)
+        col_h1, col_h2, col_h3, col_h4, col_h5, col_h6, col_h7, col_h8, col_h9 = st.columns([0.6, 0.8, 0.8, 2.2, 1.0, 1.0, 1.5, 0.8, 0.8])
+        col_h1.markdown("**Turno**")
+        col_h2.markdown("**ID**")
+        col_h3.markdown("**Hora**")
+        col_h4.markdown("**Productos**")
+        col_h5.markdown("**USD**")
+        col_h6.markdown("**Bs**")
+        col_h7.markdown("**Tipo de pago**")
+        col_h8.markdown("**Estado**")
+        col_h9.markdown("**Acción**")
+        st.markdown("<hr style='margin:0; margin-bottom:0.5rem;'>", unsafe_allow_html=True)
+        
+        for idx, venta in df.iterrows():
+            es_anulado = venta['estado'] == 'Anulado'
+            badge = '<span class="badge-anulada">ANULADA</span>' if es_anulado else '<span class="badge-finalizada">FINALIZADA</span>'
+            productos = venta['producto']
+            if len(productos) > 35:
+                productos = productos[:35] + "..."
+            
+            cols = st.columns([0.6, 0.8, 0.8, 2.2, 1.0, 1.0, 1.5, 0.8, 0.8])
+            with cols[0]:
+                st.markdown(f"<span style='font-weight:500;'>#{venta['id_cierre']}</span>", unsafe_allow_html=True)
+            with cols[1]:
+                st.markdown(f"<span style='font-weight:500;'>#{venta['id']}</span>", unsafe_allow_html=True)
+            with cols[2]:
+                st.markdown(f"<span>{venta['hora']}</span>", unsafe_allow_html=True)
+            with cols[3]:
+                st.markdown(f"<span title='{venta['producto']}'>{productos}</span>", unsafe_allow_html=True)
+            with cols[4]:
+                st.markdown(f"<span style='font-weight:600;'>${venta['total_usd']:,.2f}</span>", unsafe_allow_html=True)
+            with cols[5]:
+                st.markdown(f"<span>{venta['monto_cobrado_bs']:,.0f}</span>", unsafe_allow_html=True)
+            with cols[6]:
+                st.markdown(f"<span style='font-size:0.8rem;'>{venta['tipo_pago']}</span>", unsafe_allow_html=True)
+            with cols[7]:
+                st.markdown(badge, unsafe_allow_html=True)
+            with cols[8]:
+                if not es_anulado:
+                    if st.button("🚫", key=f"btn_anular_{venta['id']}", help="Anular venta"):
+                        try:
+                            items = venta.get('items')
+                            if isinstance(items, str):
+                                items = json.loads(items)
+                            if items and isinstance(items, list):
+                                for item in items:
+                                    if 'id' in item and 'cantidad' in item:
+                                        stock_res = db.table("inventario").select("stock").eq("id", item['id']).execute()
+                                        if stock_res.data:
+                                            stock_actual = stock_res.data[0]['stock']
+                                            db.table("inventario").update({
+                                                "stock": stock_actual + item['cantidad']
+                                            }).eq("id", item['id']).execute()
+                            db.table("ventas").update({"estado": "Anulado"}).eq("id", venta['id']).execute()
+                            st.success(f"✅ Venta #{venta['id']} anulada")
+                            time.sleep(1)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error al anular: {e}")
+                else:
+                    st.markdown("—")
+            if idx < len(df) - 1:
+                st.markdown("<hr style='margin:0.2rem 0; opacity:0.3;'>", unsafe_allow_html=True)
+        
+        if not df_activas.empty:
+            st.markdown(f"""
+                <div style='background-color: #f0f2f6; padding: 1rem; border-radius: 8px; margin-top: 1rem;'>
+                    <div style='display: flex; justify-content: space-between; align-items: center;'>
+                        <span style='font-weight:600;'>📊 TOTALES EN PANTALLA (ventas activas):</span>
+                        <span>
+                            <span style='color: #28a745; font-weight:600;'>${total_usd:,.2f}</span> | 
+                            <span style='color: #007bff; font-weight:600;'>{total_bs:,.0f} Bs</span>
+                        </span>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+    else:
+        # Si no hay resultados, mostrar mensaje
+        st.info("📭 No hay ventas que coincidan con los filtros seleccionados.")
 
 # ============================================
 # MÓDULO 5: CIERRE DE CAJA
