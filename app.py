@@ -7,6 +7,8 @@ import json
 import hashlib
 import base64
 from io import BytesIO
+def hash_clave(clave):
+    return hashlib.sha256(clave.encode()).hexdigest()
 
 # ============================================
 # CONFIGURACIÓN INICIAL
