@@ -155,123 +155,115 @@ st.markdown("""
 # ============================================
 URL = "https://phcnjozdhhyvrcbyzahs.supabase.co"
 KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBoY25qb3pkaGh5dnJjYnl6YWhzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4ODY5NzksImV4cCI6MjA5MDQ2Mjk3OX0.pmFqG1qjuOiEK_SmNXpoimLcT-muLPRtfmUN62h7OYM"
-CLAVE_ADMIN = "1234"  # Solo se usa para eliminar productos (puedes mantenerlo o también migrarlo)
+CLAVE_ADMIN = "1234"  # Solo se usa para eliminar productos
 
 db = create_client(URL, KEY)
 
 # ============================================
-# INICIALIZAR VARIABLES DE SESIÓN (para evitar AttributeError)
+# INICIALIZAR VARIABLES DE SESIÓN
 # ============================================
 if 'id_turno' not in st.session_state:
     st.session_state.id_turno = None
 if 'tasa_dia' not in st.session_state:
     st.session_state.tasa_dia = 60.0
+if 'tasa_divisas' not in st.session_state:
+    st.session_state.tasa_divisas = 60.0
 if 'fondo_bs' not in st.session_state:
     st.session_state.fondo_bs = 0
 if 'fondo_usd' not in st.session_state:
     st.session_state.fondo_usd = 0
-
-# ============================================
-# VERIFICAR TURNO ACTIVO (PERSISTENTE)
-# ============================================
-def restaurar_turno_activo():
-    if st.session_state.usuario_actual is None:
-        return None
-    try:
-        resp = db.table("cierres")\
-            .select("*")\
-            .eq("estado", "abierto")\
-            .eq("usuario_apertura", st.session_state.usuario_actual['nombre'])\
-            .order("fecha_apertura", desc=True)\
-            .limit(1)\
-            .execute()
-        if hasattr(resp, 'data') and resp.data:
-            turno = resp.data[0]
-            st.session_state.id_turno = turno['id']
-            st.session_state.tasa_dia = turno.get('tasa_apertura', 60.0)
-            st.session_state.fondo_bs = turno.get('fondo_bs', 0)
-            st.session_state.fondo_usd = turno.get('fondo_usd', 0)
-            st.query_params['turno'] = str(turno['id'])
-            return turno['id']
-    except:
-        pass
-    return None
-
-# ============================================
-# SISTEMA DE USUARIOS CON SUPABASE
-# ============================================
 if 'usuario_actual' not in st.session_state:
     st.session_state.usuario_actual = None
+if 'usuario_cargado' not in st.session_state:
+    st.session_state.usuario_cargado = False
 
+# ============================================
+# SISTEMA DE USUARIOS CON SUPABASE (CON localStorage Y PERMISOS)
+# ============================================
 def login(usuario, clave):
-    """Verifica credenciales en la tabla usuarios de Supabase (con depuración)"""
+    """Verifica credenciales y guarda usuario en localStorage"""
     try:
-        # Mostrar información de depuración
-        st.info(f"🔍 Buscando usuario: '{usuario}'")
-        
-        # Calcular hash de la clave ingresada
-        clave_hash = hash_clave(clave)
-        st.info(f"🔑 Hash calculado para la clave: {clave_hash}")
-        
-        # Consultar la tabla usuarios
         response = db.table("usuarios").select("*").eq("usuario", usuario).eq("activo", True).execute()
-        
-        st.info(f"📊 Usuarios encontrados: {len(response.data)}")
-        
         if response.data:
             user = response.data[0]
-            st.info(f"👤 Usuario encontrado: {user['usuario']} - Hash almacenado: {user['clave']}")
-            
-            if user['clave'] == clave_hash:
+            if user['clave'] == hash_clave(clave):
                 st.session_state.usuario_actual = {
                     'id': user['id'],
                     'usuario': user['usuario'],
                     'nombre': user['nombre'],
-                    'rol': user['rol']
+                    'rol': user['rol'],
+                    'activo': user['activo']
                 }
-                st.query_params['usuario'] = usuario
-                # Restaurar turno activo al iniciar sesión
-                restaurar_turno_activo()
-                st.success("✅ Login exitoso")
-                time.sleep(1)
-                st.rerun()
+                # Guardar en localStorage mediante JavaScript
+                st.markdown(f"""
+                    <script>
+                    localStorage.setItem('usuario_actual', JSON.stringify({json.dumps(st.session_state.usuario_actual)}));
+                    </script>
+                """, unsafe_allow_html=True)
                 return True
-            else:
-                st.error("❌ La clave no coincide con el hash almacenado.")
-        else:
-            st.error(f"❌ No se encontró el usuario '{usuario}' o está inactivo.")
-            
     except Exception as e:
-        st.error(f"❌ Error en login: {e}")
-        import traceback
-        st.code(traceback.format_exc())
+        st.error(f"Error en login: {e}")
     return False
 
 def logout():
     st.session_state.usuario_actual = None
     st.session_state.id_turno = None
+    # Limpiar localStorage
+    st.markdown("""
+        <script>
+        localStorage.removeItem('usuario_actual');
+        </script>
+    """, unsafe_allow_html=True)
     if 'usuario' in st.query_params:
         del st.query_params['usuario']
     if 'turno' in st.query_params:
         del st.query_params['turno']
+    st.rerun()
 
-# Restaurar sesión desde URL
-if st.session_state.usuario_actual is None and 'usuario' in st.query_params:
-    usuario = st.query_params['usuario']
-    try:
-        response = db.table("usuarios").select("*").eq("usuario", usuario).eq("activo", True).execute()
-        if response.data:
-            user = response.data[0]
-            st.session_state.usuario_actual = {
-                'id': user['id'],
-                'usuario': user['usuario'],
-                'nombre': user['nombre'],
-                'rol': user['rol']
+# Restaurar sesión desde localStorage (usando query_params como puente)
+if not st.session_state.usuario_cargado:
+    if 'usuario_local' not in st.query_params:
+        st.markdown("""
+            <script>
+            const user = localStorage.getItem('usuario_actual');
+            if (user) {
+                window.location.href = window.location.pathname + '?usuario_local=' + encodeURIComponent(user);
+            } else {
+                window.location.href = window.location.pathname + '?usuario_local=null';
             }
-            # Restaurar turno si el usuario fue restaurado desde URL
-            restaurar_turno_activo()
-    except:
-        pass
+            </script>
+        """, unsafe_allow_html=True)
+        st.session_state.usuario_cargado = True
+        st.rerun()
+    else:
+        usuario_json = st.query_params.get('usuario_local')
+        if usuario_json and usuario_json != 'null':
+            try:
+                st.session_state.usuario_actual = json.loads(usuario_json)
+            except:
+                st.session_state.usuario_actual = None
+        else:
+            st.session_state.usuario_actual = None
+        # Limpiar query_params para evitar recargas
+        st.query_params.clear()
+        st.session_state.usuario_cargado = True
+
+# ============================================
+# PERMISOS
+# ============================================
+def es_admin():
+    user = st.session_state.get('usuario_actual')
+    return user is not None and user.get('rol') == 'admin'
+
+def tiene_permiso(modulo):
+    user = st.session_state.get('usuario_actual')
+    if not user:
+        return False
+    rol = user.get('rol')
+    if rol == 'admin':
+        return True
+    modulos_empleado = ["🛒 PUNTO DE VENTA", "💸 GASTOS", "📜 HISTORIAL", "📊 CIERRE DE CAJA"]
+    return modulo in modulos_empleado
 
 # ============================================
 # FUNCIONES PARA ADMINISTRAR USUARIOS
@@ -306,7 +298,38 @@ def crear_usuario(usuario, clave, nombre, rol):
         return False
 
 # ============================================
-# MENÚ LATERAL (CON ADMINISTRACIÓN DE USUARIOS PROFESIONAL)
+# VERIFICAR TURNO ACTIVO (PERSISTENTE)
+# ============================================
+def restaurar_turno_activo():
+    if st.session_state.usuario_actual is None:
+        return None
+    try:
+        resp = db.table("cierres")\
+            .select("*")\
+            .eq("estado", "abierto")\
+            .eq("usuario_apertura", st.session_state.usuario_actual['nombre'])\
+            .order("fecha_apertura", desc=True)\
+            .limit(1)\
+            .execute()
+        if hasattr(resp, 'data') and resp.data:
+            turno = resp.data[0]
+            st.session_state.id_turno = turno['id']
+            st.session_state.tasa_dia = turno.get('tasa_apertura', 60.0)
+            st.session_state.tasa_divisas = turno.get('tasa_divisas', 60.0)
+            st.session_state.fondo_bs = turno.get('fondo_bs', 0)
+            st.session_state.fondo_usd = turno.get('fondo_usd', 0)
+            st.query_params['turno'] = str(turno['id'])
+            return turno['id']
+    except:
+        pass
+    return None
+
+# Restaurar turno si hay usuario y no hay turno activo
+if st.session_state.id_turno is None and st.session_state.usuario_actual is not None:
+    restaurar_turno_activo()
+
+# ============================================
+# MENÚ LATERAL (CON PERSISTENCIA, PERMISOS, TASAS)
 # ============================================
 with st.sidebar:
     st.markdown("""
@@ -337,11 +360,23 @@ with st.sidebar:
     
     st.divider()
     
+    # LOGIN CON SELECTOR DE USUARIOS ACTIVOS
     if not st.session_state.usuario_actual:
         with st.expander("🔐 Acceso al sistema", expanded=True):
+            # Obtener lista de usuarios activos
+            usuarios_activos = []
+            try:
+                res = db.table("usuarios").select("usuario").eq("activo", True).execute()
+                if res.data:
+                    usuarios_activos = [u['usuario'] for u in res.data]
+            except:
+                pass
+            if not usuarios_activos:
+                usuarios_activos = ["admin"]
+            
             col_user1, col_user2 = st.columns(2)
             with col_user1:
-                usuario_sel = st.text_input("Usuario", placeholder="admin")
+                usuario_sel = st.selectbox("Usuario", usuarios_activos)
             with col_user2:
                 clave_input = st.text_input("Clave", type="password")
             if st.button("✅ Ingresar", use_container_width=True):
@@ -356,183 +391,80 @@ with st.sidebar:
         st.success(f"👤 Usuario: {st.session_state.usuario_actual['nombre']} ({rol_texto})")
         if st.button("🚪 Cerrar sesión", use_container_width=True):
             logout()
-            st.rerun()
     
     st.divider()
     
-    # ============================================
-    # ADMINISTRACIÓN DE USUARIOS (PROFESIONAL)
-    # ============================================
-    if st.session_state.usuario_actual and st.session_state.usuario_actual['rol'] == 'admin':
-        with st.expander("👥 Administrar Usuarios", expanded=False):
-            st.markdown("### 📋 Lista de usuarios")
+    # INFORMACIÓN DEL TURNO CON TASAS (BCV y DIVISAS)
+    if st.session_state.id_turno:
+        with st.container(border=True):
+            st.markdown("**📊 INFORMACIÓN DEL TURNO**")
+            tasa_bcv = float(st.session_state.get('tasa_dia', 60.0))
+            st.metric("💱 Tasa BCV", f"{tasa_bcv:.2f} Bs/$")
             
-            # Obtener lista de usuarios
-            usuarios = listar_usuarios()
+            # Obtener tasa divisas actual
+            try:
+                turno_info = db.table("cierres").select("tasa_divisas").eq("id", st.session_state.id_turno).execute()
+                if turno_info.data and turno_info.data[0].get('tasa_divisas') is not None:
+                    tasa_divisas_actual = float(turno_info.data[0]['tasa_divisas'])
+                else:
+                    tasa_divisas_actual = float(st.session_state.get('tasa_divisas', tasa_bcv))
+            except:
+                tasa_divisas_actual = float(st.session_state.get('tasa_divisas', tasa_bcv))
             
-            if usuarios:
-                # Crear un DataFrame para mostrar en tabla
-                df_usuarios = pd.DataFrame(usuarios)
-                df_mostrar = df_usuarios[['id', 'usuario', 'nombre', 'rol', 'activo']].copy()
-                df_mostrar['activo'] = df_mostrar['activo'].apply(lambda x: "✅ Activo" if x else "❌ Inactivo")
-                df_mostrar.columns = ['ID', 'Usuario', 'Nombre', 'Rol', 'Estado']
-                
-                # Mostrar tabla de usuarios
-                st.dataframe(
-                    df_mostrar,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "ID": st.column_config.NumberColumn("ID", width="small"),
-                        "Usuario": st.column_config.TextColumn("Usuario"),
-                        "Nombre": st.column_config.TextColumn("Nombre"),
-                        "Rol": st.column_config.TextColumn("Rol"),
-                        "Estado": st.column_config.TextColumn("Estado"),
-                    }
+            # Si es admin, permitir editar tasa divisas
+            if es_admin():
+                nueva_tasa_divisas = st.number_input(
+                    "💱 Tasa divisas (mercado)",
+                    min_value=1.0,
+                    max_value=999.0,
+                    value=tasa_divisas_actual,
+                    step=0.5,
+                    format="%.2f",
+                    key="tasa_divisas_sidebar"
                 )
-                
-                st.markdown("---")
-                
-                # ============================================
-                # EDITAR USUARIO (con selector)
-                # ============================================
-                st.subheader("✏️ Editar usuario")
-                
-                # Selector de usuario para editar
-                usuario_editar = st.selectbox(
-                    "Seleccionar usuario para editar",
-                    options=[u['usuario'] for u in usuarios if u['usuario'] != st.session_state.usuario_actual['usuario']],
-                    key="select_editar_usuario"
-                )
-                
-                if usuario_editar:
-                    # Obtener datos del usuario seleccionado
-                    user_data = next((u for u in usuarios if u['usuario'] == usuario_editar), None)
-                    
-                    if user_data:
-                        with st.container(border=True):
-                            col_e1, col_e2 = st.columns(2)
-                            
-                            with col_e1:
-                                # Cambiar nombre
-                                nuevo_nombre = st.text_input(
-                                    "Nombre completo",
-                                    value=user_data['nombre'],
-                                    key=f"edit_nombre_{user_data['id']}"
-                                )
-                                if st.button("Actualizar nombre", key=f"btn_nombre_{user_data['id']}"):
-                                    if nuevo_nombre and nuevo_nombre != user_data['nombre']:
-                                        if actualizar_usuario(user_data['id'], 'nombre', nuevo_nombre):
-                                            st.success("✅ Nombre actualizado")
-                                            time.sleep(1)
-                                            st.rerun()
-                                        else:
-                                            st.error("Error al actualizar nombre")
-                                
-                                # Cambiar clave
-                                nueva_clave = st.text_input(
-                                    "Nueva clave",
-                                    type="password",
-                                    placeholder="Dejar vacío para no cambiar",
-                                    key=f"edit_clave_{user_data['id']}"
-                                )
-                                if st.button("Cambiar clave", key=f"btn_clave_{user_data['id']}"):
-                                    if nueva_clave:
-                                        if actualizar_usuario(user_data['id'], 'clave', nueva_clave):
-                                            st.success("✅ Clave actualizada")
-                                            time.sleep(1)
-                                            st.rerun()
-                                        else:
-                                            st.error("Error al actualizar clave")
-                            
-                            with col_e2:
-                                # Cambiar rol
-                                nuevo_rol = st.selectbox(
-                                    "Rol",
-                                    ["admin", "empleado"],
-                                    index=0 if user_data['rol'] == 'admin' else 1,
-                                    key=f"edit_rol_{user_data['id']}"
-                                )
-                                if st.button("Actualizar rol", key=f"btn_rol_{user_data['id']}"):
-                                    if nuevo_rol != user_data['rol']:
-                                        if actualizar_usuario(user_data['id'], 'rol', nuevo_rol):
-                                            st.success("✅ Rol actualizado")
-                                            time.sleep(1)
-                                            st.rerun()
-                                        else:
-                                            st.error("Error al actualizar rol")
-                                
-                                # Activar/Desactivar
-                                estado_actual = "Activo" if user_data['activo'] else "Inactivo"
-                                if user_data['activo']:
-                                    if st.button("🔴 Desactivar usuario", key=f"btn_des_{user_data['id']}", type="secondary"):
-                                        if actualizar_usuario(user_data['id'], 'activo', False):
-                                            st.success("✅ Usuario desactivado")
-                                            time.sleep(1)
-                                            st.rerun()
-                                        else:
-                                            st.error("Error al desactivar")
-                                else:
-                                    if st.button("🟢 Activar usuario", key=f"btn_act_{user_data['id']}", type="primary"):
-                                        if actualizar_usuario(user_data['id'], 'activo', True):
-                                            st.success("✅ Usuario activado")
-                                            time.sleep(1)
-                                            st.rerun()
-                                        else:
-                                            st.error("Error al activar")
-                
-                st.markdown("---")
-                
-                # ============================================
-                # CREAR NUEVO USUARIO
-                # ============================================
-                st.subheader("➕ Crear nuevo usuario")
-                with st.form("form_nuevo_usuario"):
-                    col_n1, col_n2 = st.columns(2)
-                    with col_n1:
-                        nuevo_usuario = st.text_input("Usuario *", placeholder="Ej: maria")
-                        nuevo_nombre_completo = st.text_input("Nombre completo *", placeholder="Ej: María Pérez")
-                    with col_n2:
-                        nueva_clave_user = st.text_input("Clave *", type="password", placeholder="Mínimo 4 caracteres")
-                        nuevo_rol_user = st.selectbox("Rol", ["empleado", "admin"], key="nuevo_rol_select")
-                    
-                    if st.form_submit_button("✅ Crear usuario", use_container_width=True, type="primary"):
-                        # Validaciones
-                        if not nuevo_usuario:
-                            st.error("❌ El campo 'Usuario' es obligatorio")
-                        elif not nuevo_nombre_completo:
-                            st.error("❌ El campo 'Nombre completo' es obligatorio")
-                        elif not nueva_clave_user or len(nueva_clave_user) < 4:
-                            st.error("❌ La clave debe tener al menos 4 caracteres")
-                        else:
-                            # Verificar si el usuario ya existe
-                            usuarios_existentes = [u['usuario'] for u in usuarios]
-                            if nuevo_usuario in usuarios_existentes:
-                                st.error(f"❌ El usuario '{nuevo_usuario}' ya existe")
-                            else:
-                                if crear_usuario(nuevo_usuario, nueva_clave_user, nuevo_nombre_completo, nuevo_rol_user):
-                                    st.success(f"✅ Usuario '{nuevo_usuario}' creado exitosamente")
-                                    time.sleep(1)
-                                    st.rerun()
-                                else:
-                                    st.error("❌ Error al crear el usuario. Verifica los datos.")
+                if st.button("Actualizar tasa divisas", use_container_width=True):
+                    try:
+                        db.table("cierres").update({"tasa_divisas": nueva_tasa_divisas}).eq("id", st.session_state.id_turno).execute()
+                        st.session_state.tasa_divisas = nueva_tasa_divisas
+                        st.success("Tasa divisas actualizada")
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
             else:
-                st.info("No hay usuarios registrados en el sistema")
-    
-    # Tasa BCV (solo informativa)
-    with st.container(border=True):
-        st.markdown("**💱 TASA BCV**")
-        st.metric(
-            "Bs/USD",
-            value=f"{st.session_state.get('tasa_dia', 60.0):.2f}",
-            help="Tasa actualizada desde el cierre de caja"
-        )
+                st.metric("💱 Tasa divisas (mercado)", f"{tasa_divisas_actual:.2f} Bs/$")
+            
+            fondo_bs_val = float(st.session_state.get('fondo_bs', 0))
+            fondo_usd_val = float(st.session_state.get('fondo_usd', 0))
+            st.metric("💰 Fondo inicial Bs", f"{fondo_bs_val:,.2f} Bs")
+            st.metric("💰 Fondo inicial USD", f"${fondo_usd_val:,.2f}")
+            st.caption("Datos fijados al abrir el turno")
+    else:
+        with st.container(border=True):
+            st.markdown("**💱 TASA BCV**")
+            st.metric("Bs/USD", f"{st.session_state.get('tasa_dia', 60.0):.2f}")
+            st.caption("Tasa por defecto (sin turno activo)")
     
     st.divider()
+    
+    # CONSTRUIR LISTA DE MÓDULOS SEGÚN PERMISOS
+    modulos_disponibles = []
+    if tiene_permiso("📦 INVENTARIO"):
+        modulos_disponibles.append("📦 INVENTARIO")
+    if tiene_permiso("🛒 PUNTO DE VENTA"):
+        modulos_disponibles.append("🛒 PUNTO DE VENTA")
+    if tiene_permiso("💸 GASTOS"):
+        modulos_disponibles.append("💸 GASTOS")
+    if tiene_permiso("📜 HISTORIAL"):
+        modulos_disponibles.append("📜 HISTORIAL")
+    if tiene_permiso("📊 CIERRE DE CAJA"):
+        modulos_disponibles.append("📊 CIERRE DE CAJA")
+    if es_admin():
+        modulos_disponibles.append("👥 ADMINISTRACIÓN")
     
     opcion = st.radio(
         "MÓDULOS",
-        ["📦 INVENTARIO", "🛒 PUNTO DE VENTA", "💸 GASTOS", "📜 HISTORIAL", "📊 CIERRE DE CAJA"],
+        modulos_disponibles,
         label_visibility="collapsed"
     )
     
@@ -543,6 +475,159 @@ with st.sidebar:
         st.info(f"📍 Turno activo: #{st.session_state.id_turno}")
     else:
         st.error("🔴 Caja cerrada")
+
+# ============================================
+# FUNCIONES AUXILIARES
+# ============================================
+def requiere_turno():
+    if not st.session_state.id_turno:
+        st.warning("⚠️ No hay un turno activo. Debe abrir caja en el módulo 'Cierre de Caja'.")
+        st.stop()
+
+def requiere_usuario():
+    if not st.session_state.usuario_actual:
+        st.warning("⚠️ Debe iniciar sesión para acceder a este módulo.")
+        st.stop()
+
+def formatear_usd(valor):
+    return f"${valor:,.2f}"
+
+def formatear_bs(valor):
+    return f"{valor:,.2f} Bs"
+
+def exportar_excel(df, nombre_archivo):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Datos')
+    excel_data = output.getvalue()
+    b64 = base64.b64encode(excel_data).decode()
+    href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{nombre_archivo}.xlsx">📥 Descargar Excel</a>'
+    return href
+
+# ============================================
+# MÓDULO 6: ADMINISTRACIÓN DE USUARIOS
+# ============================================
+elif opcion == "👥 ADMINISTRACIÓN":
+    if not es_admin():
+        st.error("⛔ No tienes permisos para acceder a este módulo.")
+        st.stop()
+    
+    st.markdown("<h1 class='main-header'>👥 Administración de Usuarios</h1>", unsafe_allow_html=True)
+    
+    usuarios = listar_usuarios()
+    if not usuarios:
+        st.info("No hay usuarios registrados")
+        st.stop()
+    
+    st.subheader("📋 Lista de usuarios")
+    df_usuarios = pd.DataFrame(usuarios)
+    df_mostrar = df_usuarios[['id', 'usuario', 'nombre', 'rol', 'activo']].copy()
+    df_mostrar['activo'] = df_mostrar['activo'].apply(lambda x: "✅ Activo" if x else "❌ Inactivo")
+    df_mostrar.columns = ['ID', 'Usuario', 'Nombre', 'Rol', 'Estado']
+    
+    st.dataframe(
+        df_mostrar,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "ID": st.column_config.NumberColumn("ID", width="small"),
+            "Usuario": st.column_config.TextColumn("Usuario"),
+            "Nombre": st.column_config.TextColumn("Nombre"),
+            "Rol": st.column_config.TextColumn("Rol"),
+            "Estado": st.column_config.TextColumn("Estado"),
+        }
+    )
+    
+    st.markdown("---")
+    st.subheader("✏️ Editar usuario")
+    
+    opciones_editar = [u['usuario'] for u in usuarios if u['id'] != st.session_state.usuario_actual['id']]
+    if opciones_editar:
+        usuario_editar = st.selectbox("Seleccionar usuario para editar", options=opciones_editar)
+        if usuario_editar:
+            user_data = next((u for u in usuarios if u['usuario'] == usuario_editar), None)
+            if user_data:
+                with st.container(border=True):
+                    col_e1, col_e2 = st.columns(2)
+                    with col_e1:
+                        nuevo_nombre = st.text_input("Nombre completo", value=user_data['nombre'])
+                        if st.button("Actualizar nombre"):
+                            if nuevo_nombre and nuevo_nombre != user_data['nombre']:
+                                if actualizar_usuario(user_data['id'], 'nombre', nuevo_nombre):
+                                    st.success("✅ Nombre actualizado")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error("Error al actualizar nombre")
+                        
+                        nueva_clave = st.text_input("Nueva clave", type="password", placeholder="Dejar vacío para no cambiar")
+                        if st.button("Cambiar clave"):
+                            if nueva_clave:
+                                if actualizar_usuario(user_data['id'], 'clave', nueva_clave):
+                                    st.success("✅ Clave actualizada")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error("Error al actualizar clave")
+                    with col_e2:
+                        nuevo_rol = st.selectbox("Rol", ["admin", "empleado"], index=0 if user_data['rol'] == 'admin' else 1)
+                        if st.button("Actualizar rol"):
+                            if nuevo_rol != user_data['rol']:
+                                if actualizar_usuario(user_data['id'], 'rol', nuevo_rol):
+                                    st.success("✅ Rol actualizado")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error("Error al actualizar rol")
+                        
+                        if user_data['activo']:
+                            if st.button("🔴 Desactivar usuario", type="secondary"):
+                                if actualizar_usuario(user_data['id'], 'activo', False):
+                                    st.success("✅ Usuario desactivado")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error("Error al desactivar")
+                        else:
+                            if st.button("🟢 Activar usuario", type="primary"):
+                                if actualizar_usuario(user_data['id'], 'activo', True):
+                                    st.success("✅ Usuario activado")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error("Error al activar")
+    else:
+        st.info("No hay otros usuarios para editar.")
+    
+    st.markdown("---")
+    st.subheader("➕ Crear nuevo usuario")
+    with st.form("form_nuevo_usuario"):
+        col_n1, col_n2 = st.columns(2)
+        with col_n1:
+            nuevo_usuario = st.text_input("Usuario *", placeholder="Ej: maria")
+            nuevo_nombre_completo = st.text_input("Nombre completo *", placeholder="Ej: María Pérez")
+        with col_n2:
+            nueva_clave_user = st.text_input("Clave *", type="password", placeholder="Mínimo 4 caracteres")
+            nuevo_rol_user = st.selectbox("Rol", ["empleado", "admin"])
+        
+        if st.form_submit_button("✅ Crear usuario", use_container_width=True, type="primary"):
+            if not nuevo_usuario:
+                st.error("❌ El campo 'Usuario' es obligatorio")
+            elif not nuevo_nombre_completo:
+                st.error("❌ El campo 'Nombre completo' es obligatorio")
+            elif not nueva_clave_user or len(nueva_clave_user) < 4:
+                st.error("❌ La clave debe tener al menos 4 caracteres")
+            else:
+                usuarios_existentes = [u['usuario'] for u in usuarios]
+                if nuevo_usuario in usuarios_existentes:
+                    st.error(f"❌ El usuario '{nuevo_usuario}' ya existe")
+                else:
+                    if crear_usuario(nuevo_usuario, nueva_clave_user, nuevo_nombre_completo, nuevo_rol_user):
+                        st.success(f"✅ Usuario '{nuevo_usuario}' creado exitosamente")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("❌ Error al crear el usuario. Verifica los datos.")
 
 # ============================================
 # MÓDULO 1: INVENTARIO
