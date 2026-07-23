@@ -491,142 +491,6 @@ def exportar_excel(df, nombre_archivo):
     return href
 
 # ============================================
-# MÓDULO 6: ADMINISTRACIÓN DE USUARIOS
-# ============================================
-elif opcion == "👥 ADMINISTRACIÓN":
-    if not es_admin():
-        st.error("⛔ No tienes permisos para acceder a este módulo.")
-        st.stop()
-    
-    st.markdown("<h1 class='main-header'>👥 Administración de Usuarios</h1>", unsafe_allow_html=True)
-    
-    try:
-        usuarios = listar_usuarios()
-    except Exception as e:
-        st.error(f"❌ Error al cargar usuarios: {e}")
-        st.stop()
-    
-    if not usuarios:
-        st.info("No hay usuarios registrados en el sistema.")
-        st.stop()
-    
-    st.subheader("📋 Lista de usuarios")
-    try:
-        df_usuarios = pd.DataFrame(usuarios)
-        df_mostrar = df_usuarios[['id', 'usuario', 'nombre', 'rol', 'activo']].copy()
-        df_mostrar['activo'] = df_mostrar['activo'].apply(lambda x: "✅ Activo" if x else "❌ Inactivo")
-        df_mostrar.columns = ['ID', 'Usuario', 'Nombre', 'Rol', 'Estado']
-        
-        st.dataframe(
-            df_mostrar,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "ID": st.column_config.NumberColumn("ID", width="small"),
-                "Usuario": st.column_config.TextColumn("Usuario"),
-                "Nombre": st.column_config.TextColumn("Nombre"),
-                "Rol": st.column_config.TextColumn("Rol"),
-                "Estado": st.column_config.TextColumn("Estado"),
-            }
-        )
-    except Exception as e:
-        st.error(f"❌ Error al mostrar la tabla: {e}")
-        st.stop()
-    
-    st.markdown("---")
-    st.subheader("✏️ Editar usuario")
-    
-    opciones_editar = [u['usuario'] for u in usuarios if u['id'] != st.session_state.usuario_actual['id']]
-    if opciones_editar:
-        usuario_editar = st.selectbox(
-            "Seleccionar usuario para editar",
-            options=opciones_editar,
-            key="select_editar_usuario"
-        )
-        if usuario_editar:
-            user_data = next((u for u in usuarios if u['usuario'] == usuario_editar), None)
-            if user_data:
-                with st.container(border=True):
-                    col_e1, col_e2 = st.columns(2)
-                    with col_e1:
-                        nuevo_nombre = st.text_input("Nombre completo", value=user_data['nombre'], key=f"edit_nombre_{user_data['id']}")
-                        if st.button("Actualizar nombre", key=f"btn_nombre_{user_data['id']}"):
-                            if nuevo_nombre and nuevo_nombre != user_data['nombre']:
-                                if actualizar_usuario(user_data['id'], 'nombre', nuevo_nombre):
-                                    st.success("✅ Nombre actualizado")
-                                    time.sleep(1)
-                                    st.rerun()
-                                else:
-                                    st.error("Error al actualizar nombre")
-                        nueva_clave = st.text_input("Nueva clave", type="password", placeholder="Dejar vacío para no cambiar", key=f"edit_clave_{user_data['id']}")
-                        if st.button("Cambiar clave", key=f"btn_clave_{user_data['id']}"):
-                            if nueva_clave:
-                                if actualizar_usuario(user_data['id'], 'clave', nueva_clave):
-                                    st.success("✅ Clave actualizada")
-                                    time.sleep(1)
-                                    st.rerun()
-                                else:
-                                    st.error("Error al actualizar clave")
-                    with col_e2:
-                        nuevo_rol = st.selectbox("Rol", ["admin", "empleado"], index=0 if user_data['rol'] == 'admin' else 1, key=f"edit_rol_{user_data['id']}")
-                        if st.button("Actualizar rol", key=f"btn_rol_{user_data['id']}"):
-                            if nuevo_rol != user_data['rol']:
-                                if actualizar_usuario(user_data['id'], 'rol', nuevo_rol):
-                                    st.success("✅ Rol actualizado")
-                                    time.sleep(1)
-                                    st.rerun()
-                                else:
-                                    st.error("Error al actualizar rol")
-                        if user_data['activo']:
-                            if st.button("🔴 Desactivar usuario", key=f"btn_des_{user_data['id']}", type="secondary"):
-                                if actualizar_usuario(user_data['id'], 'activo', False):
-                                    st.success("✅ Usuario desactivado")
-                                    time.sleep(1)
-                                    st.rerun()
-                                else:
-                                    st.error("Error al desactivar")
-                        else:
-                            if st.button("🟢 Activar usuario", key=f"btn_act_{user_data['id']}", type="primary"):
-                                if actualizar_usuario(user_data['id'], 'activo', True):
-                                    st.success("✅ Usuario activado")
-                                    time.sleep(1)
-                                    st.rerun()
-                                else:
-                                    st.error("Error al activar")
-    else:
-        st.info("No hay otros usuarios para editar (solo tú estás registrado).")
-    
-    st.markdown("---")
-    st.subheader("➕ Crear nuevo usuario")
-    with st.form("form_nuevo_usuario"):
-        col_n1, col_n2 = st.columns(2)
-        with col_n1:
-            nuevo_usuario = st.text_input("Usuario *", placeholder="Ej: maria")
-            nuevo_nombre_completo = st.text_input("Nombre completo *", placeholder="Ej: María Pérez")
-        with col_n2:
-            nueva_clave_user = st.text_input("Clave *", type="password", placeholder="Mínimo 4 caracteres")
-            nuevo_rol_user = st.selectbox("Rol", ["empleado", "admin"], key="nuevo_rol_select")
-        
-        if st.form_submit_button("✅ Crear usuario", use_container_width=True, type="primary"):
-            if not nuevo_usuario:
-                st.error("❌ El campo 'Usuario' es obligatorio")
-            elif not nuevo_nombre_completo:
-                st.error("❌ El campo 'Nombre completo' es obligatorio")
-            elif not nueva_clave_user or len(nueva_clave_user) < 4:
-                st.error("❌ La clave debe tener al menos 4 caracteres")
-            else:
-                usuarios_existentes = [u['usuario'] for u in usuarios]
-                if nuevo_usuario in usuarios_existentes:
-                    st.error(f"❌ El usuario '{nuevo_usuario}' ya existe")
-                else:
-                    if crear_usuario(nuevo_usuario, nueva_clave_user, nuevo_nombre_completo, nuevo_rol_user):
-                        st.success(f"✅ Usuario '{nuevo_usuario}' creado exitosamente")
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.error("❌ Error al crear el usuario. Verifica los datos.")
-
-# ============================================
 # MÓDULO 1: INVENTARIO
 # ============================================
 if opcion == "📦 INVENTARIO":
@@ -1910,3 +1774,139 @@ elif opcion == "📊 CIERRE DE CAJA":
                 st.info("No hay turnos cerrados registrados.")
         except Exception as e:
             st.error(f"Error cargando historial de cierres: {e}")
+
+# ============================================
+# MÓDULO 6: ADMINISTRACIÓN DE USUARIOS
+# ============================================
+elif opcion == "👥 ADMINISTRACIÓN":
+    if not es_admin():
+        st.error("⛔ No tienes permisos para acceder a este módulo.")
+        st.stop()
+    
+    st.markdown("<h1 class='main-header'>👥 Administración de Usuarios</h1>", unsafe_allow_html=True)
+    
+    try:
+        usuarios = listar_usuarios()
+    except Exception as e:
+        st.error(f"❌ Error al cargar usuarios: {e}")
+        st.stop()
+    
+    if not usuarios:
+        st.info("No hay usuarios registrados en el sistema.")
+        st.stop()
+    
+    st.subheader("📋 Lista de usuarios")
+    try:
+        df_usuarios = pd.DataFrame(usuarios)
+        df_mostrar = df_usuarios[['id', 'usuario', 'nombre', 'rol', 'activo']].copy()
+        df_mostrar['activo'] = df_mostrar['activo'].apply(lambda x: "✅ Activo" if x else "❌ Inactivo")
+        df_mostrar.columns = ['ID', 'Usuario', 'Nombre', 'Rol', 'Estado']
+        
+        st.dataframe(
+            df_mostrar,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "ID": st.column_config.NumberColumn("ID", width="small"),
+                "Usuario": st.column_config.TextColumn("Usuario"),
+                "Nombre": st.column_config.TextColumn("Nombre"),
+                "Rol": st.column_config.TextColumn("Rol"),
+                "Estado": st.column_config.TextColumn("Estado"),
+            }
+        )
+    except Exception as e:
+        st.error(f"❌ Error al mostrar la tabla: {e}")
+        st.stop()
+    
+    st.markdown("---")
+    st.subheader("✏️ Editar usuario")
+    
+    opciones_editar = [u['usuario'] for u in usuarios if u['id'] != st.session_state.usuario_actual['id']]
+    if opciones_editar:
+        usuario_editar = st.selectbox(
+            "Seleccionar usuario para editar",
+            options=opciones_editar,
+            key="select_editar_usuario"
+        )
+        if usuario_editar:
+            user_data = next((u for u in usuarios if u['usuario'] == usuario_editar), None)
+            if user_data:
+                with st.container(border=True):
+                    col_e1, col_e2 = st.columns(2)
+                    with col_e1:
+                        nuevo_nombre = st.text_input("Nombre completo", value=user_data['nombre'], key=f"edit_nombre_{user_data['id']}")
+                        if st.button("Actualizar nombre", key=f"btn_nombre_{user_data['id']}"):
+                            if nuevo_nombre and nuevo_nombre != user_data['nombre']:
+                                if actualizar_usuario(user_data['id'], 'nombre', nuevo_nombre):
+                                    st.success("✅ Nombre actualizado")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error("Error al actualizar nombre")
+                        nueva_clave = st.text_input("Nueva clave", type="password", placeholder="Dejar vacío para no cambiar", key=f"edit_clave_{user_data['id']}")
+                        if st.button("Cambiar clave", key=f"btn_clave_{user_data['id']}"):
+                            if nueva_clave:
+                                if actualizar_usuario(user_data['id'], 'clave', nueva_clave):
+                                    st.success("✅ Clave actualizada")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error("Error al actualizar clave")
+                    with col_e2:
+                        nuevo_rol = st.selectbox("Rol", ["admin", "empleado"], index=0 if user_data['rol'] == 'admin' else 1, key=f"edit_rol_{user_data['id']}")
+                        if st.button("Actualizar rol", key=f"btn_rol_{user_data['id']}"):
+                            if nuevo_rol != user_data['rol']:
+                                if actualizar_usuario(user_data['id'], 'rol', nuevo_rol):
+                                    st.success("✅ Rol actualizado")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error("Error al actualizar rol")
+                        if user_data['activo']:
+                            if st.button("🔴 Desactivar usuario", key=f"btn_des_{user_data['id']}", type="secondary"):
+                                if actualizar_usuario(user_data['id'], 'activo', False):
+                                    st.success("✅ Usuario desactivado")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error("Error al desactivar")
+                        else:
+                            if st.button("🟢 Activar usuario", key=f"btn_act_{user_data['id']}", type="primary"):
+                                if actualizar_usuario(user_data['id'], 'activo', True):
+                                    st.success("✅ Usuario activado")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error("Error al activar")
+    else:
+        st.info("No hay otros usuarios para editar (solo tú estás registrado).")
+    
+    st.markdown("---")
+    st.subheader("➕ Crear nuevo usuario")
+    with st.form("form_nuevo_usuario"):
+        col_n1, col_n2 = st.columns(2)
+        with col_n1:
+            nuevo_usuario = st.text_input("Usuario *", placeholder="Ej: maria")
+            nuevo_nombre_completo = st.text_input("Nombre completo *", placeholder="Ej: María Pérez")
+        with col_n2:
+            nueva_clave_user = st.text_input("Clave *", type="password", placeholder="Mínimo 4 caracteres")
+            nuevo_rol_user = st.selectbox("Rol", ["empleado", "admin"], key="nuevo_rol_select")
+        
+        if st.form_submit_button("✅ Crear usuario", use_container_width=True, type="primary"):
+            if not nuevo_usuario:
+                st.error("❌ El campo 'Usuario' es obligatorio")
+            elif not nuevo_nombre_completo:
+                st.error("❌ El campo 'Nombre completo' es obligatorio")
+            elif not nueva_clave_user or len(nueva_clave_user) < 4:
+                st.error("❌ La clave debe tener al menos 4 caracteres")
+            else:
+                usuarios_existentes = [u['usuario'] for u in usuarios]
+                if nuevo_usuario in usuarios_existentes:
+                    st.error(f"❌ El usuario '{nuevo_usuario}' ya existe")
+                else:
+                    if crear_usuario(nuevo_usuario, nueva_clave_user, nuevo_nombre_completo, nuevo_rol_user):
+                        st.success(f"✅ Usuario '{nuevo_usuario}' creado exitosamente")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("❌ Error al crear el usuario. Verifica los datos.")
