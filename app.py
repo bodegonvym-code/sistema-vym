@@ -771,7 +771,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA (CORREGIDO: CANTIDAD Y BUSCADOR NOMBRE)
+# MÓDULO 2: PUNTO DE VENTA (CON REDONDEO AUTOMÁTICO HACIA ARRIBA)
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -899,7 +899,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 "subtotal": precio_final,
                 "tipo_precio": tipo_precio
             })
-        st.session_state.carrito_version += 1  # Forzar actualización de widgets
+        st.session_state.carrito_version += 1
         st.rerun()
     
     # ============================================
@@ -953,7 +953,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
     # ============================================
     # BUSCADOR POR NOMBRE EN POPOVER (con clave fija y limpieza)
     # ============================================
-    # Clave fija para el campo de búsqueda
     NOMBRE_KEY = "buscar_nombre_popover"
     
     with st.popover("🔍 Buscar por nombre", use_container_width=True):
@@ -1091,29 +1090,30 @@ elif opcion == "🛒 PUNTO DE VENTA":
         st.markdown('</div>', unsafe_allow_html=True)
         
         total_venta_bs = total_venta_usd * tasa
+        
+        # ============================================
+        # REDONDEO AUTOMÁTICO HACIA ARRIBA (múltiplo de 10 en Bs)
+        # ============================================
+        import math
+        total_final_bs = math.ceil(total_venta_bs / 10) * 10
+        total_final_usd = total_final_bs / tasa if tasa > 0 else 0
+        
+        # Mostrar totales (con el redondeo aplicado)
         st.divider()
         col_t1, col_t2 = st.columns(2)
-        col_t1.markdown(f"### Total USD: ${total_venta_usd:,.2f}")
-        col_t2.markdown(f"### Total Bs: {total_venta_bs:,.2f}")
+        with col_t1:
+            st.markdown(f"### Total USD: ${total_final_usd:,.2f}")
+        with col_t2:
+            st.markdown(f"### Total Bs: {total_final_bs:,.2f}")
         
-        # REDONDEO
-        total_final_usd = total_venta_usd
-        total_final_bs = total_venta_bs
-        with st.expander("🔧 Ajustar monto final (redondeo)", expanded=False):
-            st.markdown("Si deseas redondear el total a cobrar, selecciona una opción e ingresa el monto:")
-            opcion = st.radio("Ajustar en:", ["No ajustar (usar calculado)", "Bolívares (Bs)", "Dólares (USD)"], horizontal=True, key="redondeo")
-            if opcion == "Bolívares (Bs)":
-                nuevo_bs = st.number_input("Monto final en Bs", min_value=0.0, value=float(total_venta_bs), step=10.0, format="%.2f", key="ajuste_bs")
-                total_final_bs = nuevo_bs
-                total_final_usd = nuevo_bs / tasa if tasa else 0
-            elif opcion == "Dólares (USD)":
-                nuevo_usd = st.number_input("Monto final en USD", min_value=0.0, value=float(total_venta_usd), step=1.0, format="%.2f", key="ajuste_usd")
-                total_final_usd = nuevo_usd
-                total_final_bs = nuevo_usd * tasa
+        # Mostrar un pequeño aviso del redondeo (opcional, para transparencia)
+        if total_final_bs != total_venta_bs:
+            st.caption(f"ℹ️ Total redondeado al múltiplo de 10 (Bs). Original: {total_venta_bs:,.2f} Bs → Cobrado: {total_final_bs:,.2f} Bs")
         
+        # ============================================
+        # SECCIÓN DE PAGOS (sin cambios)
+        # ============================================
         st.divider()
-        
-        # PAGOS (sin cambios)
         with st.expander("💳 Detalle de pagos", expanded=True):
             st.markdown("**Ingresa los montos recibidos:**")
             col_p1, col_p2 = st.columns(2)
