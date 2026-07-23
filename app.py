@@ -204,12 +204,25 @@ if 'usuario_actual' not in st.session_state:
     st.session_state.usuario_actual = None
 
 def login(usuario, clave):
-    """Verifica credenciales en la tabla usuarios de Supabase"""
+    """Verifica credenciales en la tabla usuarios de Supabase (con depuración)"""
     try:
+        # Mostrar información de depuración
+        st.info(f"🔍 Buscando usuario: '{usuario}'")
+        
+        # Calcular hash de la clave ingresada
+        clave_hash = hash_clave(clave)
+        st.info(f"🔑 Hash calculado para la clave: {clave_hash}")
+        
+        # Consultar la tabla usuarios
         response = db.table("usuarios").select("*").eq("usuario", usuario).eq("activo", True).execute()
+        
+        st.info(f"📊 Usuarios encontrados: {len(response.data)}")
+        
         if response.data:
             user = response.data[0]
-            if user['clave'] == hash_clave(clave):
+            st.info(f"👤 Usuario encontrado: {user['usuario']} - Hash almacenado: {user['clave']}")
+            
+            if user['clave'] == clave_hash:
                 st.session_state.usuario_actual = {
                     'id': user['id'],
                     'usuario': user['usuario'],
@@ -219,9 +232,19 @@ def login(usuario, clave):
                 st.query_params['usuario'] = usuario
                 # Restaurar turno activo al iniciar sesión
                 restaurar_turno_activo()
+                st.success("✅ Login exitoso")
+                time.sleep(1)
+                st.rerun()
                 return True
+            else:
+                st.error("❌ La clave no coincide con el hash almacenado.")
+        else:
+            st.error(f"❌ No se encontró el usuario '{usuario}' o está inactivo.")
+            
     except Exception as e:
-        st.error(f"Error en login: {e}")
+        st.error(f"❌ Error en login: {e}")
+        import traceback
+        st.code(traceback.format_exc())
     return False
 
 def logout():
@@ -432,7 +455,7 @@ with st.sidebar:
         st.info(f"📍 Turno activo: #{st.session_state.id_turno}")
     else:
         st.error("🔴 Caja cerrada")
-
+        
 # ============================================
 # FUNCIONES AUXILIARES
 # ============================================
