@@ -7,7 +7,12 @@ import json
 import hashlib
 import base64
 from io import BytesIO
+
+# ============================================
+# FUNCIÓN PARA HASHEAR CLAVES (SHA256)
+# ============================================
 def hash_clave(clave):
+    """Genera hash SHA256 de una clave"""
     return hashlib.sha256(clave.encode()).hexdigest()
 
 # ============================================
@@ -155,23 +160,55 @@ CLAVE_ADMIN = "1234"  # Solo se usa para eliminar productos (puedes mantenerlo o
 db = create_client(URL, KEY)
 
 # ============================================
+# INICIALIZAR VARIABLES DE SESIÓN (para evitar AttributeError)
+# ============================================
+if 'id_turno' not in st.session_state:
+    st.session_state.id_turno = None
+if 'tasa_dia' not in st.session_state:
+    st.session_state.tasa_dia = 60.0
+if 'fondo_bs' not in st.session_state:
+    st.session_state.fondo_bs = 0
+if 'fondo_usd' not in st.session_state:
+    st.session_state.fondo_usd = 0
+
+# ============================================
+# VERIFICAR TURNO ACTIVO (PERSISTENTE)
+# ============================================
+def restaurar_turno_activo():
+    if st.session_state.usuario_actual is None:
+        return None
+    try:
+        resp = db.table("cierres")\
+            .select("*")\
+            .eq("estado", "abierto")\
+            .eq("usuario_apertura", st.session_state.usuario_actual['nombre'])\
+            .order("fecha_apertura", desc=True)\
+            .limit(1)\
+            .execute()
+        if hasattr(resp, 'data') and resp.data:
+            turno = resp.data[0]
+            st.session_state.id_turno = turno['id']
+            st.session_state.tasa_dia = turno.get('tasa_apertura', 60.0)
+            st.session_state.fondo_bs = turno.get('fondo_bs', 0)
+            st.session_state.fondo_usd = turno.get('fondo_usd', 0)
+            st.query_params['turno'] = str(turno['id'])
+            return turno['id']
+    except:
+        pass
+    return None
+
+# ============================================
 # SISTEMA DE USUARIOS CON SUPABASE
 # ============================================
 if 'usuario_actual' not in st.session_state:
     st.session_state.usuario_actual = None
 
-def hash_clave(clave):
-    """Genera hash SHA256 de una clave"""
-    return hashlib.sha256(clave.encode()).hexdigest()
-
 def login(usuario, clave):
     """Verifica credenciales en la tabla usuarios de Supabase"""
     try:
-        # Buscar usuario por nombre
         response = db.table("usuarios").select("*").eq("usuario", usuario).eq("activo", True).execute()
         if response.data:
             user = response.data[0]
-            # Verificar hash de la clave
             if user['clave'] == hash_clave(clave):
                 st.session_state.usuario_actual = {
                     'id': user['id'],
@@ -180,6 +217,8 @@ def login(usuario, clave):
                     'rol': user['rol']
                 }
                 st.query_params['usuario'] = usuario
+                # Restaurar turno activo al iniciar sesión
+                restaurar_turno_activo()
                 return True
     except Exception as e:
         st.error(f"Error en login: {e}")
@@ -206,6 +245,8 @@ if st.session_state.usuario_actual is None and 'usuario' in st.query_params:
                 'nombre': user['nombre'],
                 'rol': user['rol']
             }
+            # Restaurar turno si el usuario fue restaurado desde URL
+            restaurar_turno_activo()
     except:
         pass
 
@@ -213,7 +254,6 @@ if st.session_state.usuario_actual is None and 'usuario' in st.query_params:
 # FUNCIONES PARA ADMINISTRAR USUARIOS
 # ============================================
 def listar_usuarios():
-    """Retorna todos los usuarios de la tabla"""
     try:
         response = db.table("usuarios").select("*").execute()
         return response.data if response.data else []
@@ -221,7 +261,6 @@ def listar_usuarios():
         return []
 
 def actualizar_usuario(id_usuario, campo, valor):
-    """Actualiza un campo de un usuario (clave, rol, activo)"""
     try:
         if campo == 'clave':
             valor = hash_clave(valor)
@@ -231,7 +270,6 @@ def actualizar_usuario(id_usuario, campo, valor):
         return False
 
 def crear_usuario(usuario, clave, nombre, rol):
-    """Crea un nuevo usuario"""
     try:
         db.table("usuarios").insert({
             "usuario": usuario,
@@ -306,7 +344,6 @@ with st.sidebar:
         with st.expander("👥 Administrar Usuarios", expanded=False):
             usuarios = listar_usuarios()
             if usuarios:
-                # Mostrar lista de usuarios
                 for u in usuarios:
                     col1, col2, col3 = st.columns([2, 1, 1])
                     with col1:
@@ -317,9 +354,7 @@ with st.sidebar:
                     with col3:
                         st.caption(f"Rol: {u['rol']}")
                     
-                    # Botones de acción (editar, activar/desactivar)
                     with st.expander(f"✏️ Editar {u['nombre']}", expanded=False):
-                        # Cambiar clave
                         nueva_clave = st.text_input("Nueva clave", type="password", key=f"clave_{u['id']}")
                         if st.button("Cambiar clave", key=f"btn_clave_{u['id']}"):
                             if nueva_clave:
@@ -330,7 +365,6 @@ with st.sidebar:
                                 else:
                                     st.error("Error al actualizar")
                         
-                        # Cambiar rol
                         nuevo_rol = st.selectbox("Rol", ["admin", "empleado"], index=0 if u['rol'] == 'admin' else 1, key=f"rol_{u['id']}")
                         if st.button("Cambiar rol", key=f"btn_rol_{u['id']}"):
                             if actualizar_usuario(u['id'], 'rol', nuevo_rol):
@@ -340,7 +374,6 @@ with st.sidebar:
                             else:
                                 st.error("Error al actualizar")
                         
-                        # Activar/Desactivar
                         if u['activo']:
                             if st.button("Desactivar usuario", key=f"des_{u['id']}"):
                                 if actualizar_usuario(u['id'], 'activo', False):
@@ -356,7 +389,6 @@ with st.sidebar:
                     
                     st.divider()
                 
-                # Crear nuevo usuario
                 st.subheader("➕ Nuevo usuario")
                 with st.form("nuevo_usuario"):
                     nuevo_user = st.text_input("Usuario")
