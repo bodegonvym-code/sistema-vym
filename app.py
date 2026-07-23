@@ -262,7 +262,9 @@ with st.sidebar:
                 else:
                     st.error("Clave incorrecta")
     else:
-        st.success(f"👤 Usuario: {st.session_state.usuario_actual['nombre']}")
+        # Mostrar usuario y su rol
+        rol_texto = "Admin" if st.session_state.usuario_actual.get('rol') == 'admin' else "Empleado"
+        st.success(f"👤 Usuario: {st.session_state.usuario_actual['nombre']} ({rol_texto})")
         if st.button("🚪 Cerrar sesión", use_container_width=True):
             logout()
             st.rerun()
@@ -1297,27 +1299,31 @@ elif opcion == "📜 HISTORIAL":
             with cols[7]:
                 st.markdown(badge, unsafe_allow_html=True)
             with cols[8]:
+                # RESTRICCIÓN: Solo el Administrador puede anular
                 if not es_anulado:
-                    if st.button("🚫", key=f"btn_anular_{venta['id']}", help="Anular venta"):
-                        try:
-                            items = venta.get('items')
-                            if isinstance(items, str):
-                                items = json.loads(items)
-                            if items and isinstance(items, list):
-                                for item in items:
-                                    if 'id' in item and 'cantidad' in item:
-                                        stock_res = db.table("inventario").select("stock").eq("id", item['id']).execute()
-                                        if stock_res.data:
-                                            stock_actual = stock_res.data[0]['stock']
-                                            db.table("inventario").update({
-                                                "stock": stock_actual + item['cantidad']
-                                            }).eq("id", item['id']).execute()
-                            db.table("ventas").update({"estado": "Anulado"}).eq("id", venta['id']).execute()
-                            st.success(f"✅ Venta #{venta['id']} anulada")
-                            time.sleep(1)
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error al anular: {e}")
+                    if st.session_state.usuario_actual.get('rol') == 'admin':
+                        if st.button("🚫", key=f"btn_anular_{venta['id']}", help="Anular venta"):
+                            try:
+                                items = venta.get('items')
+                                if isinstance(items, str):
+                                    items = json.loads(items)
+                                if items and isinstance(items, list):
+                                    for item in items:
+                                        if 'id' in item and 'cantidad' in item:
+                                            stock_res = db.table("inventario").select("stock").eq("id", item['id']).execute()
+                                            if stock_res.data:
+                                                stock_actual = stock_res.data[0]['stock']
+                                                db.table("inventario").update({
+                                                    "stock": stock_actual + item['cantidad']
+                                                }).eq("id", item['id']).execute()
+                                db.table("ventas").update({"estado": "Anulado"}).eq("id", venta['id']).execute()
+                                st.success(f"✅ Venta #{venta['id']} anulada")
+                                time.sleep(1)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error al anular: {e}")
+                    else:
+                        st.markdown("🔒")  # Icono de candado para indicar que no tiene permisos
                 else:
                     st.markdown("—")
             if idx < len(df) - 1:
