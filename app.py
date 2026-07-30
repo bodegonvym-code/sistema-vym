@@ -771,7 +771,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA (CON REDONDEO AUTOMÁTICO HACIA ARRIBA)
+# MÓDULO 2: PUNTO DE VENTA (CON REDONDEO AUTOMÁTICO Y PAGOS FLEXIBLES)
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -956,12 +956,8 @@ elif opcion == "🛒 PUNTO DE VENTA":
     NOMBRE_KEY = "buscar_nombre_popover"
     
     with st.popover("🔍 Buscar por nombre", use_container_width=True):
-        # Inicializar el campo vacío cada vez que se abre el popover
         if NOMBRE_KEY not in st.session_state:
             st.session_state[NOMBRE_KEY] = ""
-        else:
-            # Si ya existe, lo dejamos como está (pero lo limpiamos después de agregar)
-            pass
         
         st.markdown("**Escribe el nombre del producto:**")
         busqueda = st.text_input("", key=NOMBRE_KEY, placeholder="Ej: Harina, Aceite...", label_visibility="collapsed")
@@ -994,7 +990,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
                     c4.write(f"{precio_bs:,.2f} Bs")
                     if c5.button("➕", key=f"pop_{prod['id']}"):
                         agregar_producto(prod)
-                        # Limpiar el campo de búsqueda para la próxima vez
                         st.session_state[NOMBRE_KEY] = ""
                         st.rerun()
             else:
@@ -1045,7 +1040,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
             cols[1].write(f"${item['precio']:.2f}")
             cols[2].write(f"{item['precio'] * tasa:,.2f} Bs")
             
-            # Usamos la versión del carrito para forzar actualización de la clave
             key_cant = f"cant_{item['id']}_v{st.session_state.carrito_version}"
             nueva_cant = cols[3].number_input(
                 "",
@@ -1062,7 +1056,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
                     st.session_state.carrito_version += 1
                     st.rerun()
                 else:
-                    # Recalcular precio mayorista
                     prod_data = None
                     for p in inventario:
                         if p['id'] == item['id']:
@@ -1098,7 +1091,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
         total_final_bs = math.ceil(total_venta_bs / 10) * 10
         total_final_usd = total_final_bs / tasa if tasa > 0 else 0
         
-        # Mostrar totales (con el redondeo aplicado)
+        # Mostrar totales
         st.divider()
         col_t1, col_t2 = st.columns(2)
         with col_t1:
@@ -1106,25 +1099,27 @@ elif opcion == "🛒 PUNTO DE VENTA":
         with col_t2:
             st.markdown(f"### Total Bs: {total_final_bs:,.2f}")
         
-        # Mostrar un pequeño aviso del redondeo (opcional, para transparencia)
         if total_final_bs != total_venta_bs:
             st.caption(f"ℹ️ Total redondeado al múltiplo de 10 (Bs). Original: {total_venta_bs:,.2f} Bs → Cobrado: {total_final_bs:,.2f} Bs")
         
         # ============================================
-        # SECCIÓN DE PAGOS (sin cambios)
+        # SECCIÓN DE PAGOS MEJORADA (con step=1.0 y recordatorio)
         # ============================================
         st.divider()
         with st.expander("💳 Detalle de pagos", expanded=True):
             st.markdown("**Ingresa los montos recibidos:**")
+            st.caption(f"💰 **Total a cobrar (redondeado):** {total_final_bs:,.2f} Bs | Puedes ingresar cualquier monto mayor o igual.")
             col_p1, col_p2 = st.columns(2)
             with col_p1:
-                p_usd_ef = st.number_input("Efectivo USD", min_value=0.0, step=5.0, format="%.2f", key="p_ef_usd")
-                p_zelle = st.number_input("Zelle USD", min_value=0.0, step=5.0, format="%.2f", key="p_zelle")
-                p_otros_usd = st.number_input("Otros USD", min_value=0.0, step=5.0, format="%.2f", key="p_otros_usd")
+                st.markdown("**💵 Pagos en USD**")
+                p_usd_ef = st.number_input("Efectivo USD", min_value=0.0, step=1.0, format="%.2f", key="p_ef_usd")
+                p_zelle = st.number_input("Zelle USD", min_value=0.0, step=1.0, format="%.2f", key="p_zelle")
+                p_otros_usd = st.number_input("Otros USD", min_value=0.0, step=1.0, format="%.2f", key="p_otros_usd")
             with col_p2:
-                p_bs_ef = st.number_input("Efectivo Bs", min_value=0.0, step=100.0, format="%.2f", key="p_ef_bs")
-                p_movil = st.number_input("Pago Móvil Bs", min_value=0.0, step=100.0, format="%.2f", key="p_movil")
-                p_punto = st.number_input("Punto de Venta Bs", min_value=0.0, step=100.0, format="%.2f", key="p_punto")
+                st.markdown("**💵 Pagos en Bs**")
+                p_bs_ef = st.number_input("Efectivo Bs", min_value=0.0, step=1.0, format="%.2f", key="p_ef_bs")
+                p_movil = st.number_input("Pago Móvil Bs", min_value=0.0, step=1.0, format="%.2f", key="p_movil")
+                p_punto = st.number_input("Punto de Venta Bs", min_value=0.0, step=1.0, format="%.2f", key="p_punto")
             
             total_usd = p_usd_ef + p_zelle + p_otros_usd
             total_bs = p_bs_ef + p_movil + p_punto
@@ -1140,9 +1135,15 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 col_r3.metric("Vuelto USD", f"${vuelto:,.2f}")
             else:
                 col_r3.metric("Faltante USD", f"${abs(vuelto):,.2f}", delta_color="inverse")
-            st.success(f"✅ Pago suficiente. Vuelto: ${vuelto:.2f} / {(vuelto * tasa):,.2f} Bs" if vuelto >= -0.01 else f"❌ Faltante: ${abs(vuelto):,.2f} / {(abs(vuelto) * tasa):,.2f} Bs")
+            
+            if vuelto >= -0.01:
+                st.success(f"✅ Pago suficiente. Vuelto: ${vuelto:.2f} USD / {(vuelto * tasa):,.2f} Bs")
+            else:
+                st.error(f"❌ Faltante: ${abs(vuelto):,.2f} USD / {(abs(vuelto) * tasa):,.2f} Bs")
         
+        # ============================================
         # BOTONES DE ACCIÓN
+        # ============================================
         col_b1, col_b2, col_b3 = st.columns(3)
         with col_b1:
             if st.button("🔄 Limpiar carrito", use_container_width=True):
