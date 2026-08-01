@@ -799,7 +799,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA (CON BUSCADOR CORREGIDO)
+# MÓDULO 2: PUNTO DE VENTA (CON BUSCADOR POR NOMBRE EN DIÁLOGO)
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -835,9 +835,9 @@ elif opcion == "🛒 PUNTO DE VENTA":
     if 'carrito_version' not in st.session_state:
         st.session_state.carrito_version = 0
     
-    # Contador para el buscador por nombre (clave dinámica)
-    if 'popover_contador' not in st.session_state:
-        st.session_state.popover_contador = 0
+    # Variable para controlar la apertura del diálogo de búsqueda
+    if 'mostrar_buscador' not in st.session_state:
+        st.session_state.mostrar_buscador = False
     
     st.subheader("👥 Seleccionar Cliente / Cuenta")
     col_clientes = st.columns(4)
@@ -983,55 +983,59 @@ elif opcion == "🛒 PUNTO DE VENTA":
             st.warning(f"Código '{codigo}' no encontrado o sin stock.")
     
     # ============================================
-    # BUSCADOR POR NOMBRE EN POPOVER (CORREGIDO)
+    # BOTÓN PARA ABRIR EL BUSCADOR POR NOMBRE (DIÁLOGO)
     # ============================================
-    # Botón para abrir el popover (incrementa el contador al hacer clic)
-    if st.button("🔍 Buscar por nombre", use_container_width=True, key="btn_buscar_nombre"):
-        st.session_state.popover_contador += 1
+    if st.button("🔍 Buscar por nombre", use_container_width=True):
+        st.session_state.mostrar_buscador = True
         st.rerun()
     
-    # Popover con la clave dinámica generada al hacer clic en el botón
-    with st.popover("🔍 Buscar por nombre", use_container_width=True):
-        # La clave se genera al abrir el popover (solo una vez por apertura)
-        clave_busqueda = f"buscar_nombre_{st.session_state.popover_contador}"
-        
-        st.markdown("**Escribe el nombre del producto:**")
-        busqueda = st.text_input("", key=clave_busqueda, placeholder="Ej: Harina, Aceite...", label_visibility="collapsed")
-        
-        if busqueda:
-            resultados = []
-            for p in inventario:
-                if p['stock'] <= 0:
-                    continue
-                if busqueda.lower() in p['nombre'].lower():
-                    resultados.append(p)
-            resultados = resultados[:30]
+    # DIÁLOGO DEL BUSCADOR POR NOMBRE (SIEMPRE VACÍO AL ABRIR)
+    if st.session_state.get('mostrar_buscador', False):
+        @st.dialog("🔍 Buscar producto por nombre")
+        def buscador_nombre():
+            st.markdown("**Escribe el nombre del producto:**")
+            busqueda = st.text_input("", key="buscar_nombre_dialog", placeholder="Ej: Harina, Aceite...", label_visibility="collapsed")
             
-            if resultados:
-                st.markdown("---")
-                cols_head = st.columns([3, 1, 1, 1, 0.8])
-                cols_head[0].markdown("**Producto**")
-                cols_head[1].markdown("**Stock**")
-                cols_head[2].markdown("**Precio USD**")
-                cols_head[3].markdown("**Precio Bs**")
-                cols_head[4].markdown("")
-                st.markdown("---")
-                for prod in resultados:
-                    precio_usd = float(prod['precio_detal'])
-                    precio_bs = precio_usd * tasa
-                    c1, c2, c3, c4, c5 = st.columns([3, 1, 1, 1, 0.8])
-                    c1.write(prod['nombre'])
-                    c2.write(f"{prod['stock']:.0f}")
-                    c3.write(f"${precio_usd:.2f}")
-                    c4.write(f"{precio_bs:,.2f} Bs")
-                    if c5.button("➕", key=f"pop_{prod['id']}_{st.session_state.popover_contador}"):
-                        agregar_producto(prod)
-                        # No necesitamos limpiar nada, la próxima apertura tendrá nueva clave
-                        st.rerun()
+            if busqueda:
+                resultados = []
+                for p in inventario:
+                    if p['stock'] <= 0:
+                        continue
+                    if busqueda.lower() in p['nombre'].lower():
+                        resultados.append(p)
+                resultados = resultados[:30]
+                
+                if resultados:
+                    st.markdown("---")
+                    cols_head = st.columns([3, 1, 1, 1, 0.8])
+                    cols_head[0].markdown("**Producto**")
+                    cols_head[1].markdown("**Stock**")
+                    cols_head[2].markdown("**Precio USD**")
+                    cols_head[3].markdown("**Precio Bs**")
+                    cols_head[4].markdown("")
+                    st.markdown("---")
+                    for prod in resultados:
+                        precio_usd = float(prod['precio_detal'])
+                        precio_bs = precio_usd * tasa
+                        c1, c2, c3, c4, c5 = st.columns([3, 1, 1, 1, 0.8])
+                        c1.write(prod['nombre'])
+                        c2.write(f"{prod['stock']:.0f}")
+                        c3.write(f"${precio_usd:.2f}")
+                        c4.write(f"{precio_bs:,.2f} Bs")
+                        if c5.button("➕", key=f"dialog_{prod['id']}"):
+                            agregar_producto(prod)
+                            st.session_state.mostrar_buscador = False
+                            st.rerun()
+                else:
+                    st.info("No se encontraron productos.")
             else:
-                st.info("No se encontraron productos.")
-        else:
-            st.info("Escribe al menos una letra para buscar.")
+                st.info("Escribe al menos una letra para buscar.")
+            
+            if st.button("Cerrar", use_container_width=True):
+                st.session_state.mostrar_buscador = False
+                st.rerun()
+        
+        buscador_nombre()
     
     # ============================================
     # CARRITO SIMPLIFICADO
@@ -1121,6 +1125,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
         # ============================================
         # REDONDEO AUTOMÁTICO Y EXCEDENTE
         # ============================================
+        import math
         total_venta_bs = total_venta_usd * tasa
         total_redondeado_bs = math.ceil(total_venta_bs / 10) * 10
         total_redondeado_usd = total_redondeado_bs / tasa if tasa > 0 else 0
