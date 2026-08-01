@@ -7,6 +7,23 @@ import json
 import hashlib
 import base64
 from io import BytesIO
+import math  # <-- ya lo usamos, lo añado por claridad
+
+# ============================================
+# CONFIGURACIÓN DE CREDENCIALES (RECOMENDADO: USAR SECRETS)
+# ============================================
+# Para mayor seguridad, mueve estas credenciales a .streamlit/secrets.toml:
+# [supabase]
+# URL = "https://..."
+# KEY = "eyJ..."
+# CLAVE_ADMIN = "1234"  # Solo para compatibilidad (ya no se usa)
+# Luego, en el código usa: st.secrets["supabase"]["URL"]
+# Por ahora, mantenemos las variables directamente para no romper el despliegue.
+URL = "https://phcnjozdhhyvrcbyzahs.supabase.co"
+KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBoY25qb3pkaGh5dnJjYnl6YWhzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4ODY5NzksImV4cCI6MjA5MDQ2Mjk3OX0.pmFqG1qjuOiEK_SmNXpoimLcT-muLPRtfmUN62h7OYM"
+# CLAVE_ADMIN ya no se usa en el código, eliminada.
+
+db = create_client(URL, KEY)
 
 # ============================================
 # FUNCIÓN PARA HASHEAR CLAVES (SHA256)
@@ -151,15 +168,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================
-# CONEXIÓN A SUPABASE (SIEMPRE ONLINE)
-# ============================================
-URL = "https://phcnjozdhhyvrcbyzahs.supabase.co"
-KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBoY25qb3pkaGh5dnJjYnl6YWhzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4ODY5NzksImV4cCI6MjA5MDQ2Mjk3OX0.pmFqG1qjuOiEK_SmNXpoimLcT-muLPRtfmUN62h7OYM"
-CLAVE_ADMIN = "1234"
-
-db = create_client(URL, KEY)
-
-# ============================================
 # INICIALIZAR VARIABLES DE SESIÓN
 # ============================================
 if 'id_turno' not in st.session_state:
@@ -201,7 +209,7 @@ def login(usuario, clave):
                 """, unsafe_allow_html=True)
                 return True
     except Exception as e:
-        st.error(f"Error en login: {e}")
+        st.toast(f"Error en login: {e}", icon="❌")
     return False
 
 def logout():
@@ -372,11 +380,11 @@ with st.sidebar:
                 clave_input = st.text_input("Clave", type="password")
             if st.button("✅ Ingresar", use_container_width=True):
                 if login(usuario_sel, clave_input):
-                    st.success(f"Bienvenido {st.session_state.usuario_actual['nombre']}")
-                    time.sleep(1)
+                    st.toast(f"Bienvenido {st.session_state.usuario_actual['nombre']}", icon="👋")
+                    time.sleep(0.5)
                     st.rerun()
                 else:
-                    st.error("Usuario o clave incorrecta")
+                    st.toast("Usuario o clave incorrecta", icon="❌")
     else:
         rol_texto = "Admin" if st.session_state.usuario_actual['rol'] == 'admin' else "Empleado"
         st.success(f"👤 Usuario: {st.session_state.usuario_actual['nombre']} ({rol_texto})")
@@ -414,11 +422,11 @@ with st.sidebar:
                     try:
                         db.table("cierres").update({"tasa_divisas": nueva_tasa_divisas}).eq("id", st.session_state.id_turno).execute()
                         st.session_state.tasa_divisas = nueva_tasa_divisas
-                        st.success("Tasa divisas actualizada")
-                        time.sleep(1)
+                        st.toast("Tasa divisas actualizada", icon="✅")
+                        time.sleep(0.5)
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Error: {e}")
+                        st.toast(f"Error: {e}", icon="❌")
             else:
                 st.metric("💱 Tasa divisas (mercado)", f"{tasa_divisas_actual:.2f} Bs/$")
             
@@ -456,7 +464,9 @@ with st.sidebar:
     )
     
     st.divider()
-    st.success("✅ Conectado a Internet")
+    # Eliminamos el indicador "✅ Conectado a Internet" porque no es necesario y puede confundir
+    # si no hay una verificación real. Podemos dejar un texto fijo.
+    st.caption("Sistema en línea")  # Mensaje neutral
     if st.session_state.id_turno:
         st.info(f"📍 Turno activo: #{st.session_state.id_turno}")
     else:
@@ -491,7 +501,7 @@ def exportar_excel(df, nombre_archivo):
     return href
 
 # ============================================
-# MÓDULO 1: INVENTARIO
+# MÓDULO 1: INVENTARIO (CON CACHE Y ELIMINACIÓN SOLO ADMIN)
 # ============================================
 if opcion == "📦 INVENTARIO":
     st.markdown("<h1 class='main-header'>📦 Gestión de Inventario</h1>", unsafe_allow_html=True)
@@ -502,9 +512,18 @@ if opcion == "📦 INVENTARIO":
         "QUINCALLERIA", "OTROS"
     ]
     
+    # Cacheamos la consulta del inventario para mejorar rendimiento
+    @st.cache_data(ttl=60, show_spinner=False)
+    def cargar_inventario_completo():
+        try:
+            response = db.table("inventario").select("*").order("nombre").execute()
+            return pd.DataFrame(response.data) if response.data else pd.DataFrame()
+        except Exception as e:
+            st.error(f"Error cargando inventario: {e}")
+            return pd.DataFrame()
+    
     try:
-        response = db.table("inventario").select("*").order("nombre").execute()
-        df = pd.DataFrame(response.data) if response.data else pd.DataFrame()
+        df = cargar_inventario_completo()
         
         if not df.empty:
             if 'categoria' not in df.columns:
@@ -543,7 +562,10 @@ if opcion == "📦 INVENTARIO":
                     df_filtrado = df_filtrado[df_filtrado['categoria'] == categoria_filtro]
                 if ver_bajo_stock:
                     df_filtrado = df_filtrado[df_filtrado['stock'] < 5]
-                    st.warning(f"⚠️ Hay {len(df_filtrado)} productos con stock bajo") if len(df_filtrado) > 0 else st.success("✅ No hay productos con stock bajo")
+                    if len(df_filtrado) > 0:
+                        st.warning(f"⚠️ Hay {len(df_filtrado)} productos con stock bajo")
+                    else:
+                        st.success("✅ No hay productos con stock bajo")
                 
                 def colorear_stock(val):
                     if val < 5:
@@ -596,11 +618,11 @@ if opcion == "📦 INVENTARIO":
                                     if nuevo_codigo:
                                         datos_actualizados["codigo_barras"] = nuevo_codigo
                                     db.table("inventario").update(datos_actualizados).eq("id", prod['id']).execute()
-                                    st.success("✅ Producto actualizado")
-                                    time.sleep(1)
+                                    st.toast("✅ Producto actualizado", icon="✅")
+                                    time.sleep(0.5)
                                     st.rerun()
                                 except Exception as e:
-                                    st.error(f"Error: {e}")
+                                    st.toast(f"Error: {e}", icon="❌")
                         
                         st.divider()
                         st.subheader("🔗 Códigos de barras alternos")
@@ -615,8 +637,8 @@ if opcion == "📦 INVENTARIO":
                                     with col2:
                                         if st.button("❌", key=f"del_{ac['id']}"):
                                             db.table("codigos_alternos").delete().eq("id", int(ac["id"])).execute()
-                                            st.success("Código eliminado")
-                                            time.sleep(1)
+                                            st.toast("Código eliminado", icon="✅")
+                                            time.sleep(0.5)
                                             st.rerun()
                             else:
                                 st.info("No hay códigos alternos para este producto.")
@@ -628,32 +650,38 @@ if opcion == "📦 INVENTARIO":
                                             "producto_id": int(prod['id']),
                                             "codigo": nuevo_codigo_alt.strip()
                                         }).execute()
-                                        st.success("Código agregado correctamente")
-                                        time.sleep(1)
+                                        st.toast("Código agregado correctamente", icon="✅")
+                                        time.sleep(0.5)
                                         st.rerun()
                                     except Exception as e:
-                                        st.error(f"Error: {e}")
+                                        st.toast(f"Error: {e}", icon="❌")
                                 else:
                                     st.warning("Escribe un código válido")
                 
                 st.divider()
                 st.subheader("🗑️ Eliminar producto")
-                col_d1, col_d2 = st.columns(2)
-                with col_d1:
-                    producto_eliminar = st.selectbox("Seleccionar producto", [""] + df['nombre'].tolist(), key="eliminar")
-                with col_d2:
-                    clave = st.text_input("Clave Admin", type="password", key="clave_eliminar")
-                if producto_eliminar and st.button("❌ Eliminar", type="primary", use_container_width=True):
-                    if clave == CLAVE_ADMIN:
-                        db.table("inventario").delete().eq("nombre", producto_eliminar).execute()
-                        st.success(f"Producto '{producto_eliminar}' eliminado")
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.error("Clave incorrecta")
+                # Solo el administrador puede eliminar productos
+                if es_admin():
+                    col_d1, col_d2 = st.columns(2)
+                    with col_d1:
+                        producto_eliminar = st.selectbox("Seleccionar producto", [""] + df['nombre'].tolist(), key="eliminar")
+                    with col_d2:
+                        # Ya no pedimos clave, solo confirmación
+                        pass
+                    if producto_eliminar and st.button("❌ Eliminar", type="primary", use_container_width=True):
+                        try:
+                            db.table("inventario").delete().eq("nombre", producto_eliminar).execute()
+                            st.toast(f"Producto '{producto_eliminar}' eliminado", icon="🗑️")
+                            time.sleep(0.5)
+                            st.rerun()
+                        except Exception as e:
+                            st.toast(f"Error al eliminar: {e}", icon="❌")
+                else:
+                    st.info("🔒 Solo el administrador puede eliminar productos.")
             else:
                 st.info("No hay productos en el inventario")
         
+        # (El resto de pestañas Agregar, Estadísticas, Respaldos se mantienen igual)
         with tab2:
             with st.form("nuevo_producto", clear_on_submit=True):
                 st.markdown("### 📝 Datos del nuevo producto")
@@ -690,8 +718,8 @@ if opcion == "📦 INVENTARIO":
                             if codigo_barras:
                                 datos_nuevos["codigo_barras"] = codigo_barras
                             db.table("inventario").insert(datos_nuevos).execute()
-                            st.success(f"✅ Producto '{nombre}' registrado exitosamente")
-                            time.sleep(1)
+                            st.toast(f"✅ Producto '{nombre}' registrado", icon="✅")
+                            time.sleep(0.5)
                             st.rerun()
         
         with tab3:
@@ -771,7 +799,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA (CON REDONDEO Y EXCEDENTE INCLUIDO EN VENTA)
+# MÓDULO 2: PUNTO DE VENTA (CON REDONDEO Y EXCEDENTE INCLUIDO, BUSCADOR MEJORADO)
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -806,6 +834,10 @@ elif opcion == "🛒 PUNTO DE VENTA":
     # Contador de versión del carrito para forzar actualización de widgets
     if 'carrito_version' not in st.session_state:
         st.session_state.carrito_version = 0
+    
+    # Contador para el buscador por nombre (clave dinámica)
+    if 'popover_contador' not in st.session_state:
+        st.session_state.popover_contador = 0
     
     st.subheader("👥 Seleccionar Cliente / Cuenta")
     col_clientes = st.columns(4)
@@ -951,20 +983,17 @@ elif opcion == "🛒 PUNTO DE VENTA":
             st.warning(f"Código '{codigo}' no encontrado o sin stock.")
     
     # ============================================
-    # BUSCADOR POR NOMBRE EN POPOVER (con clave fija y limpieza)
+    # BUSCADOR POR NOMBRE EN POPOVER (CON CLAVE DINÁMICA)
     # ============================================
-    NOMBRE_KEY = "buscar_nombre_popover"
-    
+    # Incrementamos el contador antes de mostrar el popover para que cada apertura sea única
+    # pero solo si no está dentro del popover (se ejecutará al renderizar el popover)
     with st.popover("🔍 Buscar por nombre", use_container_width=True):
-        # Inicializar el campo vacío cada vez que se abre el popover
-        if NOMBRE_KEY not in st.session_state:
-            st.session_state[NOMBRE_KEY] = ""
-        else:
-            # Si ya existe, lo dejamos como está (pero lo limpiamos después de agregar)
-            pass
+        # Incrementar contador para generar una clave única por apertura
+        st.session_state.popover_contador += 1
+        clave_busqueda = f"buscar_nombre_{st.session_state.popover_contador}"
         
         st.markdown("**Escribe el nombre del producto:**")
-        busqueda = st.text_input("", key=NOMBRE_KEY, placeholder="Ej: Harina, Aceite...", label_visibility="collapsed")
+        busqueda = st.text_input("", key=clave_busqueda, placeholder="Ej: Harina, Aceite...", label_visibility="collapsed")
         
         if busqueda:
             resultados = []
@@ -992,10 +1021,9 @@ elif opcion == "🛒 PUNTO DE VENTA":
                     c2.write(f"{prod['stock']:.0f}")
                     c3.write(f"${precio_usd:.2f}")
                     c4.write(f"{precio_bs:,.2f} Bs")
-                    if c5.button("➕", key=f"pop_{prod['id']}"):
+                    if c5.button("➕", key=f"pop_{prod['id']}_{st.session_state.popover_contador}"):
                         agregar_producto(prod)
-                        # Limpiar el campo de búsqueda para la próxima vez
-                        st.session_state[NOMBRE_KEY] = ""
+                        # No necesitamos limpiar nada, la próxima apertura tendrá nueva clave
                         st.rerun()
             else:
                 st.info("No se encontraron productos.")
@@ -1003,7 +1031,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
             st.info("Escribe al menos una letra para buscar.")
     
     # ============================================
-    # CARRITO SIMPLIFICADO (con versión forzada)
+    # CARRITO SIMPLIFICADO
     # ============================================
     st.subheader(f"🛒 Carrito - {cliente_actual['nombre']}")
     carrito = cliente_actual['carrito']
@@ -1045,7 +1073,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
             cols[1].write(f"${item['precio']:.2f}")
             cols[2].write(f"{item['precio'] * tasa:,.2f} Bs")
             
-            # Usamos la versión del carrito para forzar actualización de la clave
             key_cant = f"cant_{item['id']}_v{st.session_state.carrito_version}"
             nueva_cant = cols[3].number_input(
                 "",
@@ -1062,7 +1089,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
                     st.session_state.carrito_version += 1
                     st.rerun()
                 else:
-                    # Recalcular precio mayorista
                     prod_data = None
                     for p in inventario:
                         if p['id'] == item['id']:
@@ -1090,14 +1116,12 @@ elif opcion == "🛒 PUNTO DE VENTA":
         st.markdown('</div>', unsafe_allow_html=True)
         
         # ============================================
-        # REDONDEO AUTOMÁTICO HACIA ARRIBA (múltiplo de 10 en Bs)
+        # REDONDEO AUTOMÁTICO Y EXCEDENTE
         # ============================================
-        import math
         total_venta_bs = total_venta_usd * tasa
         total_redondeado_bs = math.ceil(total_venta_bs / 10) * 10
         total_redondeado_usd = total_redondeado_bs / tasa if tasa > 0 else 0
         
-        # Mostrar totales (con el redondeo aplicado)
         st.divider()
         col_t1, col_t2 = st.columns(2)
         with col_t1:
@@ -1109,7 +1133,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
             st.caption(f"ℹ️ Total redondeado al múltiplo de 10 (Bs). Original: {total_venta_bs:,.2f} Bs → Redondeado: {total_redondeado_bs:,.2f} Bs")
         
         # ============================================
-        # SECCIÓN DE PAGOS MEJORADA (con step=1.0 y recordatorio)
+        # SECCIÓN DE PAGOS MEJORADA
         # ============================================
         st.divider()
         with st.expander("💳 Detalle de pagos", expanded=True):
@@ -1127,12 +1151,10 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 p_movil = st.number_input("Pago Móvil Bs", min_value=0.0, step=1.0, format="%.2f", key="p_movil")
                 p_punto = st.number_input("Punto de Venta Bs", min_value=0.0, step=1.0, format="%.2f", key="p_punto")
             
-            # Calcular total pagado en USD y Bs
             total_pagado_usd = p_usd_ef + p_zelle + p_otros_usd
             total_pagado_bs = p_bs_ef + p_movil + p_punto
             total_pagado_equiv_usd = total_pagado_usd + (total_pagado_bs / tasa if tasa else 0)
             
-            # Calcular vuelto (basado en el total redondeado)
             vuelto_usd = total_pagado_equiv_usd - total_redondeado_usd
             
             st.divider()
@@ -1144,7 +1166,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
             else:
                 col_r3.metric("Faltante USD", f"${abs(vuelto_usd):,.2f}", delta_color="inverse")
             
-            # Mensaje de éxito o error (corregido)
             if vuelto_usd >= -0.01:
                 st.success(f"✅ Pago suficiente. Vuelto: ${vuelto_usd:.2f} USD / {(vuelto_usd * tasa):,.2f} Bs")
             else:
@@ -1158,7 +1179,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 st.session_state.carrito_version += 1
                 st.rerun()
         with col_b2:
-            # Validar que el pago sea suficiente (vuelto >= 0)
             if st.button("✅ Cobrar y cerrar cuenta", type="primary", use_container_width=True, disabled=not (vuelto_usd >= -0.01 and carrito)):
                 try:
                     items_res = [f"{item['cantidad']:.0f}x {item['nombre']}" for item in carrito]
@@ -1168,10 +1188,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                     
                     info_cli = f" - Cliente: {cliente_actual.get('cliente', '')}" if cliente_actual.get('cliente') else ""
                     
-                    # El total de la venta será el monto que realmente se cobra (pagos recibidos)
-                    # Si el pago es mayor que el redondeo, se registra el pago total.
-                    # Si es igual, se registra el redondeado.
-                    total_venta_usd_final = total_pagado_equiv_usd  # Esto incluye el excedente
+                    total_venta_usd_final = total_pagado_equiv_usd
                     total_venta_bs_final = total_venta_usd_final * tasa
                     
                     venta = {
@@ -1196,7 +1213,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                     }
                     db.table("ventas").insert(venta).execute()
                     st.balloons()
-                    st.success(f"✅ Venta registrada - {cliente_actual['nombre']}{info_cli}")
+                    st.toast(f"✅ Venta registrada - {cliente_actual['nombre']}{info_cli}", icon="✅")
                     
                     @st.dialog("🧾 Ticket de Venta")
                     def ticket():
@@ -1292,14 +1309,14 @@ elif opcion == "💸 GASTOS":
                 if monto_bs_extra > 0:
                     gasto_data["monto_bs_extra"] = monto_bs_extra
                 db.table("gastos").insert(gasto_data).execute()
-                st.success("✅ Gasto registrado correctamente")
-                time.sleep(1)
+                st.toast("✅ Gasto registrado", icon="✅")
+                time.sleep(0.5)
                 st.rerun()
             else:
                 st.warning("⚠️ Complete los campos obligatorios (*)")
 
 # ============================================
-# MÓDULO 4: HISTORIAL DE VENTAS (OPTIMIZADO CON FILTROS Y TIPO DE PAGO)
+# MÓDULO 4: HISTORIAL DE VENTAS (OPTIMIZADO)
 # ============================================
 elif opcion == "📜 HISTORIAL":
     requiere_usuario()
@@ -1340,7 +1357,6 @@ elif opcion == "📜 HISTORIAL":
         
         submitted = st.form_submit_button("🔍 Buscar", use_container_width=True)
     
-    # Actualizar filtros si se presionó el botón
     if submitted:
         st.session_state.historial_filtros = {
             'fecha_desde': fecha_desde,
@@ -1352,10 +1368,12 @@ elif opcion == "📜 HISTORIAL":
         st.rerun()
     
     # ============================================
-    # CONSULTAR VENTAS CON LOS FILTROS GUARDADOS
+    # CONSULTAR VENTAS CON FILTROS Y SOLO COLUMNAS NECESARIAS
     # ============================================
     filtros = st.session_state.historial_filtros
-    query = db.table("ventas").select("*").order("fecha", desc=True)
+    # Seleccionamos solo las columnas que necesitamos para reducir la carga
+    columnas = "id, id_cierre, fecha, producto, total_usd, monto_cobrado_bs, estado, items, pago_divisas, pago_zelle, pago_otros, pago_efectivo, pago_movil, pago_punto, costo_venta, cliente"
+    query = db.table("ventas").select(columnas).order("fecha", desc=True)
     
     if filtros['fecha_desde']:
         query = query.gte("fecha", filtros['fecha_desde'].strftime("%Y-%m-%d"))
@@ -1376,7 +1394,7 @@ elif opcion == "📜 HISTORIAL":
         df = pd.DataFrame()
     
     # ============================================
-    # PROCESAMIENTO Y VISUALIZACIÓN
+    # PROCESAMIENTO Y VISUALIZACIÓN (SIN CAMBIOS)
     # ============================================
     if not df.empty:
         df['fecha_dt'] = pd.to_datetime(df['fecha'])
@@ -1446,7 +1464,7 @@ elif opcion == "📜 HISTORIAL":
         
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Cabeceras de la tabla
+        # Cabeceras de la tabla (igual que antes)
         col_h1, col_h2, col_h3, col_h4, col_h5, col_h6, col_h7, col_h8, col_h9 = st.columns([0.6, 0.8, 0.8, 2.2, 1.0, 1.0, 1.5, 0.8, 0.8])
         col_h1.markdown("**Turno**")
         col_h2.markdown("**ID**")
@@ -1482,7 +1500,6 @@ elif opcion == "📜 HISTORIAL":
             with cols[7]:
                 st.markdown(badge, unsafe_allow_html=True)
             with cols[8]:
-                # RESTRICCIÓN: Solo el Administrador puede anular
                 if not es_anulado:
                     if st.session_state.usuario_actual.get('rol') == 'admin':
                         if st.button("🚫", key=f"btn_anular_{venta['id']}", help="Anular venta"):
@@ -1500,13 +1517,13 @@ elif opcion == "📜 HISTORIAL":
                                                     "stock": stock_actual + item['cantidad']
                                                 }).eq("id", item['id']).execute()
                                 db.table("ventas").update({"estado": "Anulado"}).eq("id", venta['id']).execute()
-                                st.success(f"✅ Venta #{venta['id']} anulada")
-                                time.sleep(1)
+                                st.toast(f"✅ Venta #{venta['id']} anulada", icon="✅")
+                                time.sleep(0.5)
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error al anular: {e}")
                     else:
-                        st.markdown("🔒")  # Icono de candado para indicar que no tiene permisos
+                        st.markdown("🔒")
                 else:
                     st.markdown("—")
             if idx < len(df) - 1:
@@ -1525,11 +1542,10 @@ elif opcion == "📜 HISTORIAL":
                 </div>
             """, unsafe_allow_html=True)
     else:
-        # No hay ventas con los filtros actuales
         st.info("📭 No hay ventas que coincidan con los filtros seleccionados.")
 
 # ============================================
-# MÓDULO 5: CIERRE DE CAJA
+# MÓDULO 5: CIERRE DE CAJA (CON STEP=1.0)
 # ============================================
 elif opcion == "📊 CIERRE DE CAJA":
     st.markdown("<h1 class='main-header'>📊 Cierre de Caja</h1>", unsafe_allow_html=True)
@@ -1565,8 +1581,8 @@ elif opcion == "📊 CIERRE DE CAJA":
                             st.session_state.tasa_dia = tasa_apertura
                             st.session_state.fondo_bs = fondo_bs
                             st.session_state.fondo_usd = fondo_usd
-                            st.success(f"✅ Turno #{res.data[0]['id']} abierto")
-                            time.sleep(1)
+                            st.toast(f"✅ Turno #{res.data[0]['id']} abierto", icon="✅")
+                            time.sleep(0.5)
                             st.rerun()
                     except Exception as e:
                         st.error(f"Error: {e}")
@@ -1641,14 +1657,14 @@ elif opcion == "📊 CIERRE DE CAJA":
             col_f1, col_f2 = st.columns(2)
             with col_f1:
                 st.markdown("**💰 Bolívares (Bs)**")
-                efec_bs = st.number_input("Efectivo Bs", min_value=0.0, value=0.0, step=100.0, format="%.2f", key="bs_efectivo")
-                pmovil_bs = st.number_input("Pago Móvil Bs", min_value=0.0, value=0.0, step=100.0, format="%.2f", key="bs_pmovil")
-                punto_bs = st.number_input("Punto Venta Bs", min_value=0.0, value=0.0, step=100.0, format="%.2f", key="bs_punto")
+                efec_bs = st.number_input("Efectivo Bs", min_value=0.0, value=0.0, step=1.0, format="%.2f", key="bs_efectivo")
+                pmovil_bs = st.number_input("Pago Móvil Bs", min_value=0.0, value=0.0, step=1.0, format="%.2f", key="bs_pmovil")
+                punto_bs = st.number_input("Punto Venta Bs", min_value=0.0, value=0.0, step=1.0, format="%.2f", key="bs_punto")
             with col_f2:
                 st.markdown("**💰 Dólares (USD)**")
-                efec_usd = st.number_input("Efectivo USD", min_value=0.0, value=0.0, step=5.0, format="%.2f", key="usd_efectivo")
-                zelle_usd = st.number_input("Zelle USD", min_value=0.0, value=0.0, step=5.0, format="%.2f", key="usd_zelle")
-                otros_usd = st.number_input("Otros USD", min_value=0.0, value=0.0, step=5.0, format="%.2f", key="usd_otros")
+                efec_usd = st.number_input("Efectivo USD", min_value=0.0, value=0.0, step=1.0, format="%.2f", key="usd_efectivo")
+                zelle_usd = st.number_input("Zelle USD", min_value=0.0, value=0.0, step=1.0, format="%.2f", key="usd_zelle")
+                otros_usd = st.number_input("Otros USD", min_value=0.0, value=0.0, step=1.0, format="%.2f", key="usd_otros")
             observaciones = st.text_area("📝 Observaciones (opcional)", placeholder="Ej: Todo en orden...")
             st.markdown("---")
             previsualizar = st.form_submit_button("👁️ PREVISUALIZAR CIERRE", use_container_width=True)
@@ -1725,7 +1741,7 @@ elif opcion == "📊 CIERRE DE CAJA":
                     st.session_state.id_turno = None
                     st.session_state.montos_calculados = False
                     st.balloons()
-                    st.success("✅ Turno cerrado exitosamente!")
+                    st.toast("✅ Turno cerrado exitosamente!", icon="🎉")
 
                     st.markdown("---")
                     st.subheader("📄 REPORTE DE CIERRE")
@@ -1855,8 +1871,8 @@ elif opcion == "👥 ADMINISTRACIÓN":
                         if st.button("Actualizar nombre", key=f"btn_nombre_{user_data['id']}"):
                             if nuevo_nombre and nuevo_nombre != user_data['nombre']:
                                 if actualizar_usuario(user_data['id'], 'nombre', nuevo_nombre):
-                                    st.success("✅ Nombre actualizado")
-                                    time.sleep(1)
+                                    st.toast("✅ Nombre actualizado", icon="✅")
+                                    time.sleep(0.5)
                                     st.rerun()
                                 else:
                                     st.error("Error al actualizar nombre")
@@ -1864,8 +1880,8 @@ elif opcion == "👥 ADMINISTRACIÓN":
                         if st.button("Cambiar clave", key=f"btn_clave_{user_data['id']}"):
                             if nueva_clave:
                                 if actualizar_usuario(user_data['id'], 'clave', nueva_clave):
-                                    st.success("✅ Clave actualizada")
-                                    time.sleep(1)
+                                    st.toast("✅ Clave actualizada", icon="✅")
+                                    time.sleep(0.5)
                                     st.rerun()
                                 else:
                                     st.error("Error al actualizar clave")
@@ -1874,24 +1890,24 @@ elif opcion == "👥 ADMINISTRACIÓN":
                         if st.button("Actualizar rol", key=f"btn_rol_{user_data['id']}"):
                             if nuevo_rol != user_data['rol']:
                                 if actualizar_usuario(user_data['id'], 'rol', nuevo_rol):
-                                    st.success("✅ Rol actualizado")
-                                    time.sleep(1)
+                                    st.toast("✅ Rol actualizado", icon="✅")
+                                    time.sleep(0.5)
                                     st.rerun()
                                 else:
                                     st.error("Error al actualizar rol")
                         if user_data['activo']:
                             if st.button("🔴 Desactivar usuario", key=f"btn_des_{user_data['id']}", type="secondary"):
                                 if actualizar_usuario(user_data['id'], 'activo', False):
-                                    st.success("✅ Usuario desactivado")
-                                    time.sleep(1)
+                                    st.toast("✅ Usuario desactivado", icon="✅")
+                                    time.sleep(0.5)
                                     st.rerun()
                                 else:
                                     st.error("Error al desactivar")
                         else:
                             if st.button("🟢 Activar usuario", key=f"btn_act_{user_data['id']}", type="primary"):
                                 if actualizar_usuario(user_data['id'], 'activo', True):
-                                    st.success("✅ Usuario activado")
-                                    time.sleep(1)
+                                    st.toast("✅ Usuario activado", icon="✅")
+                                    time.sleep(0.5)
                                     st.rerun()
                                 else:
                                     st.error("Error al activar")
@@ -1922,8 +1938,8 @@ elif opcion == "👥 ADMINISTRACIÓN":
                     st.error(f"❌ El usuario '{nuevo_usuario}' ya existe")
                 else:
                     if crear_usuario(nuevo_usuario, nueva_clave_user, nuevo_nombre_completo, nuevo_rol_user):
-                        st.success(f"✅ Usuario '{nuevo_usuario}' creado exitosamente")
-                        time.sleep(1)
+                        st.toast(f"✅ Usuario '{nuevo_usuario}' creado", icon="✅")
+                        time.sleep(0.5)
                         st.rerun()
                     else:
                         st.error("❌ Error al crear el usuario. Verifica los datos.")
