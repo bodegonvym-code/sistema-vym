@@ -771,7 +771,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA (REDONDEO + AJUSTE POR PAGO REAL)
+# MÓDULO 2: PUNTO DE VENTA (CON REDONDEO Y EXCEDENTE INCLUIDO EN VENTA)
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -803,6 +803,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
     if 'cliente_actual' not in st.session_state:
         st.session_state.cliente_actual = 'cliente_1'
     
+    # Contador de versión del carrito para forzar actualización de widgets
     if 'carrito_version' not in st.session_state:
         st.session_state.carrito_version = 0
     
@@ -822,6 +823,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
     cliente_actual = st.session_state.clientes[st.session_state.cliente_actual]
     st.divider()
     
+    # CABECERA DEL CLIENTE ACTUAL
     col1, col2, col3 = st.columns([2, 2, 1])
     with col1:
         st.markdown(f"**Cliente:** {cliente_actual['nombre']}")
@@ -860,7 +862,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
         st.stop()
     
     # ============================================
-    # FUNCIÓN PARA AGREGAR PRODUCTO
+    # FUNCIÓN PARA AGREGAR PRODUCTO (CON RECÁLCULO DE PRECIO)
     # ============================================
     def agregar_producto(prod):
         carrito = st.session_state.clientes[st.session_state.cliente_actual]['carrito']
@@ -901,11 +903,13 @@ elif opcion == "🛒 PUNTO DE VENTA":
         st.rerun()
     
     # ============================================
-    # CÓDIGO DE BARRAS
+    # CAMPO PRINCIPAL PARA CÓDIGO DE BARRAS (con clear_on_submit)
     # ============================================
     st.markdown("""
         <style>
-        .stForm > div:first-child > div:last-child { display: none; }
+        .stForm > div:first-child > div:last-child {
+            display: none;
+        }
         .stTextInput > div > div > input {
             border-radius: 30px;
             padding: 0.75rem 1rem;
@@ -947,14 +951,21 @@ elif opcion == "🛒 PUNTO DE VENTA":
             st.warning(f"Código '{codigo}' no encontrado o sin stock.")
     
     # ============================================
-    # BUSCADOR POR NOMBRE
+    # BUSCADOR POR NOMBRE EN POPOVER (con clave fija y limpieza)
     # ============================================
     NOMBRE_KEY = "buscar_nombre_popover"
+    
     with st.popover("🔍 Buscar por nombre", use_container_width=True):
+        # Inicializar el campo vacío cada vez que se abre el popover
         if NOMBRE_KEY not in st.session_state:
             st.session_state[NOMBRE_KEY] = ""
+        else:
+            # Si ya existe, lo dejamos como está (pero lo limpiamos después de agregar)
+            pass
+        
         st.markdown("**Escribe el nombre del producto:**")
         busqueda = st.text_input("", key=NOMBRE_KEY, placeholder="Ej: Harina, Aceite...", label_visibility="collapsed")
+        
         if busqueda:
             resultados = []
             for p in inventario:
@@ -963,6 +974,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 if busqueda.lower() in p['nombre'].lower():
                     resultados.append(p)
             resultados = resultados[:30]
+            
             if resultados:
                 st.markdown("---")
                 cols_head = st.columns([3, 1, 1, 1, 0.8])
@@ -982,6 +994,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                     c4.write(f"{precio_bs:,.2f} Bs")
                     if c5.button("➕", key=f"pop_{prod['id']}"):
                         agregar_producto(prod)
+                        # Limpiar el campo de búsqueda para la próxima vez
                         st.session_state[NOMBRE_KEY] = ""
                         st.rerun()
             else:
@@ -990,10 +1003,11 @@ elif opcion == "🛒 PUNTO DE VENTA":
             st.info("Escribe al menos una letra para buscar.")
     
     # ============================================
-    # CARRITO
+    # CARRITO SIMPLIFICADO (con versión forzada)
     # ============================================
     st.subheader(f"🛒 Carrito - {cliente_actual['nombre']}")
     carrito = cliente_actual['carrito']
+    
     if not carrito:
         st.info("Carrito vacío")
     else:
@@ -1010,7 +1024,10 @@ elif opcion == "🛒 PUNTO DE VENTA":
             }
             </style>
         """, unsafe_allow_html=True)
+        
         st.markdown('<div class="carrito-scroll">', unsafe_allow_html=True)
+        
+        # Cabeceras
         cols_head = st.columns([3, 1, 1.2, 1, 0.5])
         cols_head[0].write("**Producto**")
         cols_head[1].write("**Precio USD**")
@@ -1018,13 +1035,17 @@ elif opcion == "🛒 PUNTO DE VENTA":
         cols_head[3].write("**Cantidad**")
         cols_head[4].write("**Eliminar**")
         st.markdown("---")
+        
         total_venta_usd = 0.0
         total_costo = 0.0
+        
         for item in carrito:
             cols = st.columns([3, 1, 1.2, 1, 0.5])
             cols[0].write(item['nombre'])
             cols[1].write(f"${item['precio']:.2f}")
             cols[2].write(f"{item['precio'] * tasa:,.2f} Bs")
+            
+            # Usamos la versión del carrito para forzar actualización de la clave
             key_cant = f"cant_{item['id']}_v{st.session_state.carrito_version}"
             nueva_cant = cols[3].number_input(
                 "",
@@ -1041,6 +1062,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                     st.session_state.carrito_version += 1
                     st.rerun()
                 else:
+                    # Recalcular precio mayorista
                     prod_data = None
                     for p in inventario:
                         if p['id'] == item['id']:
@@ -1056,32 +1078,39 @@ elif opcion == "🛒 PUNTO DE VENTA":
                     item['subtotal'] = item['cantidad'] * item['precio']
                     st.session_state.carrito_version += 1
                     st.rerun()
+            
             if cols[4].button("❌", key=f"del_{item['id']}_v{st.session_state.carrito_version}"):
                 st.session_state.clientes[st.session_state.cliente_actual]['carrito'].remove(item)
                 st.session_state.carrito_version += 1
                 st.rerun()
+            
             total_venta_usd += item['subtotal']
             total_costo += item['cantidad'] * item['costo']
+        
         st.markdown('</div>', unsafe_allow_html=True)
         
-        total_venta_bs = total_venta_usd * tasa
-        
-        # --- Redondeo automático hacia arriba (múltiplo de 10) ---
+        # ============================================
+        # REDONDEO AUTOMÁTICO HACIA ARRIBA (múltiplo de 10 en Bs)
+        # ============================================
         import math
+        total_venta_bs = total_venta_usd * tasa
         total_redondeado_bs = math.ceil(total_venta_bs / 10) * 10
         total_redondeado_usd = total_redondeado_bs / tasa if tasa > 0 else 0
         
-        # Mostrar totales iniciales (sin ajustar aún)
+        # Mostrar totales (con el redondeo aplicado)
         st.divider()
         col_t1, col_t2 = st.columns(2)
         with col_t1:
-            st.markdown(f"### Total USD: ${total_redondeado_usd:,.2f}")
+            st.markdown(f"### Total redondeado USD: ${total_redondeado_usd:,.2f}")
         with col_t2:
-            st.markdown(f"### Total Bs: {total_redondeado_bs:,.2f}")
-        if total_redondeado_bs != total_venta_bs:
-            st.caption(f"ℹ️ Total redondeado al múltiplo de 10 (Bs). Original: {total_venta_bs:,.2f} Bs → Cobrado: {total_redondeado_bs:,.2f} Bs")
+            st.markdown(f"### Total redondeado Bs: {total_redondeado_bs:,.2f}")
         
-        # --- SECCIÓN DE PAGOS ---
+        if total_redondeado_bs != total_venta_bs:
+            st.caption(f"ℹ️ Total redondeado al múltiplo de 10 (Bs). Original: {total_venta_bs:,.2f} Bs → Redondeado: {total_redondeado_bs:,.2f} Bs")
+        
+        # ============================================
+        # SECCIÓN DE PAGOS MEJORADA (con step=1.0 y recordatorio)
+        # ============================================
         st.divider()
         with st.expander("💳 Detalle de pagos", expanded=True):
             st.markdown("**Ingresa los montos recibidos:**")
@@ -1098,46 +1127,30 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 p_movil = st.number_input("Pago Móvil Bs", min_value=0.0, step=1.0, format="%.2f", key="p_movil")
                 p_punto = st.number_input("Punto de Venta Bs", min_value=0.0, step=1.0, format="%.2f", key="p_punto")
             
-            total_pagos_usd = p_usd_ef + p_zelle + p_otros_usd
-            total_pagos_bs = p_bs_ef + p_movil + p_punto
-            total_pagos_equiv = total_pagos_usd + (total_pagos_bs / tasa if tasa else 0)
-            esperado_usd = total_redondeado_bs / tasa if tasa else 0
-            vuelto = total_pagos_equiv - esperado_usd
+            # Calcular total pagado en USD y Bs
+            total_pagado_usd = p_usd_ef + p_zelle + p_otros_usd
+            total_pagado_bs = p_bs_ef + p_movil + p_punto
+            total_pagado_equiv_usd = total_pagado_usd + (total_pagado_bs / tasa if tasa else 0)
             
-            # --- NUEVA LÓGICA: si el pago en Bs es mayor al redondeado, ajustamos el total de la venta ---
-            total_final_bs = total_redondeado_bs
-            total_final_usd = total_redondeado_usd
-            ajuste_por_pago = False
-            
-            # Si el total de pagos en Bs supera al redondeado, usamos ese monto como total de venta
-            if total_pagos_bs >= total_redondeado_bs:
-                total_final_bs = total_pagos_bs
-                total_final_usd = total_pagos_bs / tasa if tasa > 0 else 0
-                ajuste_por_pago = True
-            # Si el total de pagos en USD supera al esperado, también ajustamos
-            elif total_pagos_usd >= total_redondeado_usd:
-                total_final_usd = total_pagos_usd
-                total_final_bs = total_pagos_usd * tasa
-                ajuste_por_pago = True
-            
-            # Recalcular vuelto con el nuevo total
-            vuelto = total_pagos_equiv - (total_final_bs / tasa if tasa else 0)
-            
-            # Mostrar mensaje si hubo ajuste
-            if ajuste_por_pago:
-                st.info(f"💰 **Total ajustado por pago mayor:** {total_final_bs:,.2f} Bs (anterior: {total_redondeado_bs:,.2f} Bs)")
+            # Calcular vuelto (basado en el total redondeado)
+            vuelto_usd = total_pagado_equiv_usd - total_redondeado_usd
             
             st.divider()
             col_r1, col_r2, col_r3 = st.columns(3)
-            col_r1.metric("Pagado USD eq.", f"${total_pagos_equiv:,.2f}")
-            col_r2.metric("Total a cobrar (ajustado) USD", f"${total_final_usd:,.2f}")
-            if vuelto >= 0:
-                col_r3.metric("Vuelto USD", f"${vuelto:,.2f}")
+            col_r1.metric("Pagado USD eq.", f"${total_pagado_equiv_usd:,.2f}")
+            col_r2.metric("Esperado USD (redondeado)", f"${total_redondeado_usd:,.2f}")
+            if vuelto_usd >= 0:
+                col_r3.metric("Vuelto USD", f"${vuelto_usd:,.2f}")
             else:
-                col_r3.metric("Faltante USD", f"${abs(vuelto):,.2f}", delta_color="inverse")
-            st.success(f"✅ Pago suficiente. Vuelto: ${vuelto:.2f} USD / {(vuelto * tasa):,.2f} Bs" if vuelto >= -0.01 else st.error(f"❌ Faltante: ${abs(vuelto):,.2f} USD / {(abs(vuelto) * tasa):,.2f} Bs")
+                col_r3.metric("Faltante USD", f"${abs(vuelto_usd):,.2f}", delta_color="inverse")
+            
+            # Mensaje de éxito o error (corregido)
+            if vuelto_usd >= -0.01:
+                st.success(f"✅ Pago suficiente. Vuelto: ${vuelto_usd:.2f} USD / {(vuelto_usd * tasa):,.2f} Bs")
+            else:
+                st.error(f"❌ Faltante: ${abs(vuelto_usd):,.2f} USD / {(abs(vuelto_usd) * tasa):,.2f} Bs")
         
-        # --- BOTONES DE ACCIÓN ---
+        # BOTONES DE ACCIÓN
         col_b1, col_b2, col_b3 = st.columns(3)
         with col_b1:
             if st.button("🔄 Limpiar carrito", use_container_width=True):
@@ -1145,19 +1158,28 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 st.session_state.carrito_version += 1
                 st.rerun()
         with col_b2:
-            if st.button("✅ Cobrar y cerrar cuenta", type="primary", use_container_width=True, disabled=not (vuelto >= -0.01 and carrito)):
+            # Validar que el pago sea suficiente (vuelto >= 0)
+            if st.button("✅ Cobrar y cerrar cuenta", type="primary", use_container_width=True, disabled=not (vuelto_usd >= -0.01 and carrito)):
                 try:
                     items_res = [f"{item['cantidad']:.0f}x {item['nombre']}" for item in carrito]
                     for item in carrito:
                         stock_actual = db.table("inventario").select("stock").eq("id", item['id']).execute().data[0]['stock']
                         db.table("inventario").update({"stock": stock_actual - item['cantidad']}).eq("id", item['id']).execute()
+                    
                     info_cli = f" - Cliente: {cliente_actual.get('cliente', '')}" if cliente_actual.get('cliente') else ""
+                    
+                    # El total de la venta será el monto que realmente se cobra (pagos recibidos)
+                    # Si el pago es mayor que el redondeo, se registra el pago total.
+                    # Si es igual, se registra el redondeado.
+                    total_venta_usd_final = total_pagado_equiv_usd  # Esto incluye el excedente
+                    total_venta_bs_final = total_venta_usd_final * tasa
+                    
                     venta = {
                         "id_cierre": id_turno,
                         "producto": ", ".join(items_res),
                         "cantidad": len(carrito),
-                        "total_usd": round(total_final_usd, 2),
-                        "monto_cobrado_bs": round(total_final_bs, 2),
+                        "total_usd": round(total_venta_usd_final, 2),
+                        "monto_cobrado_bs": round(total_venta_bs_final, 2),
                         "tasa_cambio": tasa,
                         "pago_divisas": round(p_usd_ef, 2),
                         "pago_zelle": round(p_zelle, 2),
@@ -1193,9 +1215,9 @@ elif opcion == "🛒 PUNTO DE VENTA":
                         st.dataframe(df_ticket, use_container_width=True, hide_index=True)
                         st.divider()
                         col1, col2 = st.columns(2)
-                        col1.metric("Total USD", f"${total_final_usd:,.2f}")
-                        col2.metric("Total Bs", f"{total_final_bs:,.2f} Bs")
-                        st.metric("Vuelto", f"${vuelto:.2f} USD / {(vuelto * tasa):,.2f} Bs")
+                        col1.metric("Total cobrado USD", f"${total_venta_usd_final:,.2f}")
+                        col2.metric("Total cobrado Bs", f"{total_venta_bs_final:,.2f} Bs")
+                        st.metric("Vuelto", f"${vuelto_usd:.2f} USD / {(vuelto_usd * tasa):,.2f} Bs")
                         if st.button("Cerrar ticket", use_container_width=True):
                             st.rerun()
                     ticket()
