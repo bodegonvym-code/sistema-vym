@@ -771,7 +771,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA (CON REDONDEO AUTOMÁTICO Y PAGOS FLEXIBLES)
+# MÓDULO 2: PUNTO DE VENTA (REDONDEO + AJUSTE POR PAGO REAL)
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -803,7 +803,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
     if 'cliente_actual' not in st.session_state:
         st.session_state.cliente_actual = 'cliente_1'
     
-    # Contador de versión del carrito para forzar actualización de widgets
     if 'carrito_version' not in st.session_state:
         st.session_state.carrito_version = 0
     
@@ -823,7 +822,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
     cliente_actual = st.session_state.clientes[st.session_state.cliente_actual]
     st.divider()
     
-    # CABECERA DEL CLIENTE ACTUAL
     col1, col2, col3 = st.columns([2, 2, 1])
     with col1:
         st.markdown(f"**Cliente:** {cliente_actual['nombre']}")
@@ -862,7 +860,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
         st.stop()
     
     # ============================================
-    # FUNCIÓN PARA AGREGAR PRODUCTO (CON RECÁLCULO DE PRECIO)
+    # FUNCIÓN PARA AGREGAR PRODUCTO
     # ============================================
     def agregar_producto(prod):
         carrito = st.session_state.clientes[st.session_state.cliente_actual]['carrito']
@@ -903,13 +901,11 @@ elif opcion == "🛒 PUNTO DE VENTA":
         st.rerun()
     
     # ============================================
-    # CAMPO PRINCIPAL PARA CÓDIGO DE BARRAS (con clear_on_submit)
+    # CÓDIGO DE BARRAS
     # ============================================
     st.markdown("""
         <style>
-        .stForm > div:first-child > div:last-child {
-            display: none;
-        }
+        .stForm > div:first-child > div:last-child { display: none; }
         .stTextInput > div > div > input {
             border-radius: 30px;
             padding: 0.75rem 1rem;
@@ -951,17 +947,14 @@ elif opcion == "🛒 PUNTO DE VENTA":
             st.warning(f"Código '{codigo}' no encontrado o sin stock.")
     
     # ============================================
-    # BUSCADOR POR NOMBRE EN POPOVER (con clave fija y limpieza)
+    # BUSCADOR POR NOMBRE
     # ============================================
     NOMBRE_KEY = "buscar_nombre_popover"
-    
     with st.popover("🔍 Buscar por nombre", use_container_width=True):
         if NOMBRE_KEY not in st.session_state:
             st.session_state[NOMBRE_KEY] = ""
-        
         st.markdown("**Escribe el nombre del producto:**")
         busqueda = st.text_input("", key=NOMBRE_KEY, placeholder="Ej: Harina, Aceite...", label_visibility="collapsed")
-        
         if busqueda:
             resultados = []
             for p in inventario:
@@ -970,7 +963,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 if busqueda.lower() in p['nombre'].lower():
                     resultados.append(p)
             resultados = resultados[:30]
-            
             if resultados:
                 st.markdown("---")
                 cols_head = st.columns([3, 1, 1, 1, 0.8])
@@ -998,11 +990,10 @@ elif opcion == "🛒 PUNTO DE VENTA":
             st.info("Escribe al menos una letra para buscar.")
     
     # ============================================
-    # CARRITO SIMPLIFICADO (con versión forzada)
+    # CARRITO
     # ============================================
     st.subheader(f"🛒 Carrito - {cliente_actual['nombre']}")
     carrito = cliente_actual['carrito']
-    
     if not carrito:
         st.info("Carrito vacío")
     else:
@@ -1019,10 +1010,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
             }
             </style>
         """, unsafe_allow_html=True)
-        
         st.markdown('<div class="carrito-scroll">', unsafe_allow_html=True)
-        
-        # Cabeceras
         cols_head = st.columns([3, 1, 1.2, 1, 0.5])
         cols_head[0].write("**Producto**")
         cols_head[1].write("**Precio USD**")
@@ -1030,16 +1018,13 @@ elif opcion == "🛒 PUNTO DE VENTA":
         cols_head[3].write("**Cantidad**")
         cols_head[4].write("**Eliminar**")
         st.markdown("---")
-        
         total_venta_usd = 0.0
         total_costo = 0.0
-        
         for item in carrito:
             cols = st.columns([3, 1, 1.2, 1, 0.5])
             cols[0].write(item['nombre'])
             cols[1].write(f"${item['precio']:.2f}")
             cols[2].write(f"{item['precio'] * tasa:,.2f} Bs")
-            
             key_cant = f"cant_{item['id']}_v{st.session_state.carrito_version}"
             nueva_cant = cols[3].number_input(
                 "",
@@ -1071,44 +1056,36 @@ elif opcion == "🛒 PUNTO DE VENTA":
                     item['subtotal'] = item['cantidad'] * item['precio']
                     st.session_state.carrito_version += 1
                     st.rerun()
-            
             if cols[4].button("❌", key=f"del_{item['id']}_v{st.session_state.carrito_version}"):
                 st.session_state.clientes[st.session_state.cliente_actual]['carrito'].remove(item)
                 st.session_state.carrito_version += 1
                 st.rerun()
-            
             total_venta_usd += item['subtotal']
             total_costo += item['cantidad'] * item['costo']
-        
         st.markdown('</div>', unsafe_allow_html=True)
         
         total_venta_bs = total_venta_usd * tasa
         
-        # ============================================
-        # REDONDEO AUTOMÁTICO HACIA ARRIBA (múltiplo de 10 en Bs)
-        # ============================================
+        # --- Redondeo automático hacia arriba (múltiplo de 10) ---
         import math
-        total_final_bs = math.ceil(total_venta_bs / 10) * 10
-        total_final_usd = total_final_bs / tasa if tasa > 0 else 0
+        total_redondeado_bs = math.ceil(total_venta_bs / 10) * 10
+        total_redondeado_usd = total_redondeado_bs / tasa if tasa > 0 else 0
         
-        # Mostrar totales
+        # Mostrar totales iniciales (sin ajustar aún)
         st.divider()
         col_t1, col_t2 = st.columns(2)
         with col_t1:
-            st.markdown(f"### Total USD: ${total_final_usd:,.2f}")
+            st.markdown(f"### Total USD: ${total_redondeado_usd:,.2f}")
         with col_t2:
-            st.markdown(f"### Total Bs: {total_final_bs:,.2f}")
+            st.markdown(f"### Total Bs: {total_redondeado_bs:,.2f}")
+        if total_redondeado_bs != total_venta_bs:
+            st.caption(f"ℹ️ Total redondeado al múltiplo de 10 (Bs). Original: {total_venta_bs:,.2f} Bs → Cobrado: {total_redondeado_bs:,.2f} Bs")
         
-        if total_final_bs != total_venta_bs:
-            st.caption(f"ℹ️ Total redondeado al múltiplo de 10 (Bs). Original: {total_venta_bs:,.2f} Bs → Cobrado: {total_final_bs:,.2f} Bs")
-        
-        # ============================================
-        # SECCIÓN DE PAGOS MEJORADA (con step=1.0 y recordatorio)
-        # ============================================
+        # --- SECCIÓN DE PAGOS ---
         st.divider()
         with st.expander("💳 Detalle de pagos", expanded=True):
             st.markdown("**Ingresa los montos recibidos:**")
-            st.caption(f"💰 **Total a cobrar (redondeado):** {total_final_bs:,.2f} Bs | Puedes ingresar cualquier monto mayor o igual.")
+            st.caption(f"💰 **Total a cobrar (redondeado):** {total_redondeado_bs:,.2f} Bs | Puedes ingresar cualquier monto mayor o igual.")
             col_p1, col_p2 = st.columns(2)
             with col_p1:
                 st.markdown("**💵 Pagos en USD**")
@@ -1121,29 +1098,46 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 p_movil = st.number_input("Pago Móvil Bs", min_value=0.0, step=1.0, format="%.2f", key="p_movil")
                 p_punto = st.number_input("Punto de Venta Bs", min_value=0.0, step=1.0, format="%.2f", key="p_punto")
             
-            total_usd = p_usd_ef + p_zelle + p_otros_usd
-            total_bs = p_bs_ef + p_movil + p_punto
-            total_equiv = total_usd + (total_bs / tasa if tasa else 0)
-            esperado_usd = total_final_bs / tasa if tasa else 0
-            vuelto = total_equiv - esperado_usd
+            total_pagos_usd = p_usd_ef + p_zelle + p_otros_usd
+            total_pagos_bs = p_bs_ef + p_movil + p_punto
+            total_pagos_equiv = total_pagos_usd + (total_pagos_bs / tasa if tasa else 0)
+            esperado_usd = total_redondeado_bs / tasa if tasa else 0
+            vuelto = total_pagos_equiv - esperado_usd
+            
+            # --- NUEVA LÓGICA: si el pago en Bs es mayor al redondeado, ajustamos el total de la venta ---
+            total_final_bs = total_redondeado_bs
+            total_final_usd = total_redondeado_usd
+            ajuste_por_pago = False
+            
+            # Si el total de pagos en Bs supera al redondeado, usamos ese monto como total de venta
+            if total_pagos_bs >= total_redondeado_bs:
+                total_final_bs = total_pagos_bs
+                total_final_usd = total_pagos_bs / tasa if tasa > 0 else 0
+                ajuste_por_pago = True
+            # Si el total de pagos en USD supera al esperado, también ajustamos
+            elif total_pagos_usd >= total_redondeado_usd:
+                total_final_usd = total_pagos_usd
+                total_final_bs = total_pagos_usd * tasa
+                ajuste_por_pago = True
+            
+            # Recalcular vuelto con el nuevo total
+            vuelto = total_pagos_equiv - (total_final_bs / tasa if tasa else 0)
+            
+            # Mostrar mensaje si hubo ajuste
+            if ajuste_por_pago:
+                st.info(f"💰 **Total ajustado por pago mayor:** {total_final_bs:,.2f} Bs (anterior: {total_redondeado_bs:,.2f} Bs)")
             
             st.divider()
             col_r1, col_r2, col_r3 = st.columns(3)
-            col_r1.metric("Pagado USD eq.", f"${total_equiv:,.2f}")
-            col_r2.metric("Esperado USD", f"${esperado_usd:,.2f}")
+            col_r1.metric("Pagado USD eq.", f"${total_pagos_equiv:,.2f}")
+            col_r2.metric("Total a cobrar (ajustado) USD", f"${total_final_usd:,.2f}")
             if vuelto >= 0:
                 col_r3.metric("Vuelto USD", f"${vuelto:,.2f}")
             else:
                 col_r3.metric("Faltante USD", f"${abs(vuelto):,.2f}", delta_color="inverse")
-            
-            if vuelto >= -0.01:
-                st.success(f"✅ Pago suficiente. Vuelto: ${vuelto:.2f} USD / {(vuelto * tasa):,.2f} Bs")
-            else:
-                st.error(f"❌ Faltante: ${abs(vuelto):,.2f} USD / {(abs(vuelto) * tasa):,.2f} Bs")
+            st.success(f"✅ Pago suficiente. Vuelto: ${vuelto:.2f} USD / {(vuelto * tasa):,.2f} Bs" if vuelto >= -0.01 else st.error(f"❌ Faltante: ${abs(vuelto):,.2f} USD / {(abs(vuelto) * tasa):,.2f} Bs")
         
-        # ============================================
-        # BOTONES DE ACCIÓN
-        # ============================================
+        # --- BOTONES DE ACCIÓN ---
         col_b1, col_b2, col_b3 = st.columns(3)
         with col_b1:
             if st.button("🔄 Limpiar carrito", use_container_width=True):
