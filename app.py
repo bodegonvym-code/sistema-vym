@@ -799,7 +799,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA (CON REDONDEO Y EXCEDENTE INCLUIDO, BUSCADOR MEJORADO)
+# MÓDULO 2: PUNTO DE VENTA (CON BUSCADOR CORREGIDO)
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -983,13 +983,16 @@ elif opcion == "🛒 PUNTO DE VENTA":
             st.warning(f"Código '{codigo}' no encontrado o sin stock.")
     
     # ============================================
-    # BUSCADOR POR NOMBRE EN POPOVER (CON CLAVE DINÁMICA)
+    # BUSCADOR POR NOMBRE EN POPOVER (CORREGIDO)
     # ============================================
-    # Incrementamos el contador antes de mostrar el popover para que cada apertura sea única
-    # pero solo si no está dentro del popover (se ejecutará al renderizar el popover)
-    with st.popover("🔍 Buscar por nombre", use_container_width=True):
-        # Incrementar contador para generar una clave única por apertura
+    # Botón para abrir el popover (incrementa el contador al hacer clic)
+    if st.button("🔍 Buscar por nombre", use_container_width=True, key="btn_buscar_nombre"):
         st.session_state.popover_contador += 1
+        st.rerun()
+    
+    # Popover con la clave dinámica generada al hacer clic en el botón
+    with st.popover("🔍 Buscar por nombre", use_container_width=True):
+        # La clave se genera al abrir el popover (solo una vez por apertura)
         clave_busqueda = f"buscar_nombre_{st.session_state.popover_contador}"
         
         st.markdown("**Escribe el nombre del producto:**")
@@ -1213,7 +1216,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
                     }
                     db.table("ventas").insert(venta).execute()
                     st.balloons()
-                    st.toast(f"✅ Venta registrada - {cliente_actual['nombre']}{info_cli}", icon="✅")
+                    st.success(f"✅ Venta registrada - {cliente_actual['nombre']}{info_cli}")
                     
                     @st.dialog("🧾 Ticket de Venta")
                     def ticket():
