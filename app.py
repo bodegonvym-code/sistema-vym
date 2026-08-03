@@ -7,21 +7,13 @@ import json
 import hashlib
 import base64
 from io import BytesIO
-import math  # <-- ya lo usamos, lo añado por claridad
+import math
 
 # ============================================
-# CONFIGURACIÓN DE CREDENCIALES (RECOMENDADO: USAR SECRETS)
+# CONFIGURACIÓN DE CREDENCIALES
 # ============================================
-# Para mayor seguridad, mueve estas credenciales a .streamlit/secrets.toml:
-# [supabase]
-# URL = "https://..."
-# KEY = "eyJ..."
-# CLAVE_ADMIN = "1234"  # Solo para compatibilidad (ya no se usa)
-# Luego, en el código usa: st.secrets["supabase"]["URL"]
-# Por ahora, mantenemos las variables directamente para no romper el despliegue.
 URL = "https://phcnjozdhhyvrcbyzahs.supabase.co"
 KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBoY25qb3pkaGh5dnJjYnl6YWhzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4ODY5NzksImV4cCI6MjA5MDQ2Mjk3OX0.pmFqG1qjuOiEK_SmNXpoimLcT-muLPRtfmUN62h7OYM"
-# CLAVE_ADMIN ya no se usa en el código, eliminada.
 
 db = create_client(URL, KEY)
 
@@ -29,7 +21,6 @@ db = create_client(URL, KEY)
 # FUNCIÓN PARA HASHEAR CLAVES (SHA256)
 # ============================================
 def hash_clave(clave):
-    """Genera hash SHA256 de una clave"""
     return hashlib.sha256(clave.encode()).hexdigest()
 
 # ============================================
@@ -52,49 +43,22 @@ def aplicar_tema():
     if st.session_state.tema == 'oscuro':
         return """
             <style>
-            .stApp {
-                background-color: #1e1e1e;
-                color: #ffffff;
-            }
-            .main-header {
-                color: #FF8C00 !important;
-            }
-            .stMarkdown, .stText, p, span, label, h1, h2, h3, h4 {
-                color: #ffffff !important;
-            }
-            .stButton > button {
-                background-color: #FF8C00 !important;
-                color: #000000 !important;
-            }
-            .stButton > button:hover {
-                background-color: #E67E00 !important;
-            }
-            .stDataFrame {
-                background-color: #2d2d2d;
-            }
+            .stApp { background-color: #1e1e1e; color: #ffffff; }
+            .main-header { color: #FF8C00 !important; }
+            .stMarkdown, .stText, p, span, label, h1, h2, h3, h4 { color: #ffffff !important; }
+            .stButton > button { background-color: #FF8C00 !important; color: #000000 !important; }
+            .stButton > button:hover { background-color: #E67E00 !important; }
+            .stDataFrame { background-color: #2d2d2d; }
             </style>
         """
     else:
         return """
             <style>
-            .stApp {
-                background-color: #ffffff;
-                color: #000000;
-            }
-            .main-header {
-                color: #1E88E5 !important;
-            }
-            .stButton > button {
-                background-color: #FF8C00 !important;
-                color: #ffffff !important;
-                border: none;
-            }
-            .stButton > button:hover {
-                background-color: #E67E00 !important;
-            }
-            .stMarkdown, .stText, p, span, label, h1, h2, h3, h4 {
-                color: #000000 !important;
-            }
+            .stApp { background-color: #ffffff; color: #000000; }
+            .main-header { color: #1E88E5 !important; }
+            .stButton > button { background-color: #FF8C00 !important; color: #ffffff !important; border: none; }
+            .stButton > button:hover { background-color: #E67E00 !important; }
+            .stMarkdown, .stText, p, span, label, h1, h2, h3, h4 { color: #000000 !important; }
             </style>
         """
 
@@ -126,44 +90,11 @@ st.markdown("""
         box-shadow: 0 5px 15px rgba(0,0,0,0.2);
         background-color: #E67E00;
     }
-    .success-box {
-        background-color: #d4edda;
-        color: #155724;
-        padding: 1rem;
-        border-radius: 8px;
-        border-left: 5px solid #28a745;
-    }
-    .warning-box {
-        background-color: #fff3cd;
-        color: #856404;
-        padding: 1rem;
-        border-radius: 8px;
-        border-left: 5px solid #ffc107;
-    }
-    .error-box {
-        background-color: #f8d7da;
-        color: #721c24;
-        padding: 1rem;
-        border-radius: 8px;
-        border-left: 5px solid #dc3545;
-    }
-    .product-card {
-        background-color: #f9f9f9;
-        padding: 1rem;
-        border-radius: 10px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        margin-bottom: 1rem;
-        color: #000000;
-    }
-    .badge-stock-bajo {
-        background-color: #dc3545;
-        color: white;
-        padding: 0.2rem 0.6rem;
-        border-radius: 12px;
-        font-size: 0.7rem;
-        font-weight: 600;
-        margin-left: 0.5rem;
-    }
+    .success-box { background-color: #d4edda; color: #155724; padding: 1rem; border-radius: 8px; border-left: 5px solid #28a745; }
+    .warning-box { background-color: #fff3cd; color: #856404; padding: 1rem; border-radius: 8px; border-left: 5px solid #ffc107; }
+    .error-box { background-color: #f8d7da; color: #721c24; padding: 1rem; border-radius: 8px; border-left: 5px solid #dc3545; }
+    .product-card { background-color: #f9f9f9; padding: 1rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 1rem; color: #000000; }
+    .badge-stock-bajo { background-color: #dc3545; color: white; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.7rem; font-weight: 600; margin-left: 0.5rem; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -464,9 +395,7 @@ with st.sidebar:
     )
     
     st.divider()
-    # Eliminamos el indicador "✅ Conectado a Internet" porque no es necesario y puede confundir
-    # si no hay una verificación real. Podemos dejar un texto fijo.
-    st.caption("Sistema en línea")  # Mensaje neutral
+    st.caption("Sistema en línea")
     if st.session_state.id_turno:
         st.info(f"📍 Turno activo: #{st.session_state.id_turno}")
     else:
@@ -501,7 +430,7 @@ def exportar_excel(df, nombre_archivo):
     return href
 
 # ============================================
-# MÓDULO 1: INVENTARIO (CON CACHE Y ELIMINACIÓN SOLO ADMIN)
+# MÓDULO 1: INVENTARIO
 # ============================================
 if opcion == "📦 INVENTARIO":
     st.markdown("<h1 class='main-header'>📦 Gestión de Inventario</h1>", unsafe_allow_html=True)
@@ -512,7 +441,6 @@ if opcion == "📦 INVENTARIO":
         "QUINCALLERIA", "OTROS"
     ]
     
-    # Cacheamos la consulta del inventario para mejorar rendimiento
     @st.cache_data(ttl=60, show_spinner=False)
     def cargar_inventario_completo():
         try:
@@ -660,14 +588,10 @@ if opcion == "📦 INVENTARIO":
                 
                 st.divider()
                 st.subheader("🗑️ Eliminar producto")
-                # Solo el administrador puede eliminar productos
                 if es_admin():
                     col_d1, col_d2 = st.columns(2)
                     with col_d1:
                         producto_eliminar = st.selectbox("Seleccionar producto", [""] + df['nombre'].tolist(), key="eliminar")
-                    with col_d2:
-                        # Ya no pedimos clave, solo confirmación
-                        pass
                     if producto_eliminar and st.button("❌ Eliminar", type="primary", use_container_width=True):
                         try:
                             db.table("inventario").delete().eq("nombre", producto_eliminar).execute()
@@ -681,7 +605,6 @@ if opcion == "📦 INVENTARIO":
             else:
                 st.info("No hay productos en el inventario")
         
-        # (El resto de pestañas Agregar, Estadísticas, Respaldos se mantienen igual)
         with tab2:
             with st.form("nuevo_producto", clear_on_submit=True):
                 st.markdown("### 📝 Datos del nuevo producto")
@@ -799,7 +722,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA (CON EXCEDENTE SUMADO AL TOTAL DE VENTA)
+# MÓDULO 2: PUNTO DE VENTA (CON BUSCADOR POR NOMBRE EN DIÁLOGO)
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -812,7 +735,8 @@ elif opcion == "🛒 PUNTO DE VENTA":
     st.markdown(f"""
         <div style='background-color: #e7f3ff; padding: 0.5rem; border-radius: 8px; margin-bottom: 0.5rem; font-size:0.9rem;'>
             <span style='font-weight:600;'>📍 Turno #{id_turno}</span> | 
-            <span>💱 Tasa: {tasa:.2f} Bs/$</span> |
+            <span>💱 Tasa BCV: {tasa:.2f} Bs/$</span> |
+            <span>💱 Tasa Divisas: {st.session_state.tasa_divisas:.2f} Bs/$</span> |
             <span>👤 Cajero: {st.session_state.usuario_actual['nombre']}</span>
         </div>
     """, unsafe_allow_html=True)
@@ -831,9 +755,13 @@ elif opcion == "🛒 PUNTO DE VENTA":
     if 'cliente_actual' not in st.session_state:
         st.session_state.cliente_actual = 'cliente_1'
     
-    # Contador de versión del carrito para forzar actualización de widgets
+    # Contador de versión del carrito
     if 'carrito_version' not in st.session_state:
         st.session_state.carrito_version = 0
+    
+    # Variable para controlar el diálogo de búsqueda
+    if 'mostrar_buscador' not in st.session_state:
+        st.session_state.mostrar_buscador = False
     
     st.subheader("👥 Seleccionar Cliente / Cuenta")
     col_clientes = st.columns(4)
@@ -890,7 +818,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
         st.stop()
     
     # ============================================
-    # FUNCIÓN PARA AGREGAR PRODUCTO (CON RECÁLCULO DE PRECIO)
+    # FUNCIÓN PARA AGREGAR PRODUCTO
     # ============================================
     def agregar_producto(prod):
         carrito = st.session_state.clientes[st.session_state.cliente_actual]['carrito']
@@ -931,7 +859,7 @@ elif opcion == "🛒 PUNTO DE VENTA":
         st.rerun()
     
     # ============================================
-    # CAMPO PRINCIPAL PARA CÓDIGO DE BARRAS (con clear_on_submit)
+    # CAMPO PRINCIPAL PARA CÓDIGO DE BARRAS
     # ============================================
     st.markdown("""
         <style>
@@ -979,55 +907,58 @@ elif opcion == "🛒 PUNTO DE VENTA":
             st.warning(f"Código '{codigo}' no encontrado o sin stock.")
     
     # ============================================
-    # BUSCADOR POR NOMBRE EN POPOVER (con clave fija y limpieza)
+    # BOTÓN PARA BUSCAR POR NOMBRE (DIÁLOGO)
     # ============================================
-    # Usamos la versión estable que ya funciona
-    if 'popover_contador' not in st.session_state:
-        st.session_state.popover_contador = 0
-    
     if st.button("🔍 Buscar por nombre", use_container_width=True):
-        st.session_state.popover_contador += 1
+        st.session_state.mostrar_buscador = True
         st.rerun()
     
-    with st.popover("🔍 Buscar por nombre", use_container_width=True):
-        clave_busqueda = f"buscar_nombre_{st.session_state.popover_contador}"
-        
-        st.markdown("**Escribe el nombre del producto:**")
-        busqueda = st.text_input("", key=clave_busqueda, placeholder="Ej: Harina, Aceite...", label_visibility="collapsed")
-        
-        if busqueda:
-            resultados = []
-            for p in inventario:
-                if p['stock'] <= 0:
-                    continue
-                if busqueda.lower() in p['nombre'].lower():
-                    resultados.append(p)
-            resultados = resultados[:30]
+    if st.session_state.get('mostrar_buscador', False):
+        @st.dialog("🔍 Buscar producto por nombre")
+        def buscador_nombre():
+            st.markdown("**Escribe el nombre del producto:**")
+            busqueda = st.text_input("", key="buscar_nombre_dialog", placeholder="Ej: Harina, Aceite...", label_visibility="collapsed")
             
-            if resultados:
-                st.markdown("---")
-                cols_head = st.columns([3, 1, 1, 1, 0.8])
-                cols_head[0].markdown("**Producto**")
-                cols_head[1].markdown("**Stock**")
-                cols_head[2].markdown("**Precio USD**")
-                cols_head[3].markdown("**Precio Bs**")
-                cols_head[4].markdown("")
-                st.markdown("---")
-                for prod in resultados:
-                    precio_usd = float(prod['precio_detal'])
-                    precio_bs = precio_usd * tasa
-                    c1, c2, c3, c4, c5 = st.columns([3, 1, 1, 1, 0.8])
-                    c1.write(prod['nombre'])
-                    c2.write(f"{prod['stock']:.0f}")
-                    c3.write(f"${precio_usd:.2f}")
-                    c4.write(f"{precio_bs:,.2f} Bs")
-                    if c5.button("➕", key=f"pop_{prod['id']}_{st.session_state.popover_contador}"):
-                        agregar_producto(prod)
-                        st.rerun()
+            if busqueda:
+                resultados = []
+                for p in inventario:
+                    if p['stock'] <= 0:
+                        continue
+                    if busqueda.lower() in p['nombre'].lower():
+                        resultados.append(p)
+                resultados = resultados[:30]
+                
+                if resultados:
+                    st.markdown("---")
+                    cols_head = st.columns([3, 1, 1, 1, 0.8])
+                    cols_head[0].markdown("**Producto**")
+                    cols_head[1].markdown("**Stock**")
+                    cols_head[2].markdown("**Precio USD**")
+                    cols_head[3].markdown("**Precio Bs**")
+                    cols_head[4].markdown("")
+                    st.markdown("---")
+                    for prod in resultados:
+                        precio_usd = float(prod['precio_detal'])
+                        precio_bs = precio_usd * tasa
+                        c1, c2, c3, c4, c5 = st.columns([3, 1, 1, 1, 0.8])
+                        c1.write(prod['nombre'])
+                        c2.write(f"{prod['stock']:.0f}")
+                        c3.write(f"${precio_usd:.2f}")
+                        c4.write(f"{precio_bs:,.2f} Bs")
+                        if c5.button("➕", key=f"dialog_{prod['id']}"):
+                            agregar_producto(prod)
+                            st.session_state.mostrar_buscador = False
+                            st.rerun()
+                else:
+                    st.info("No se encontraron productos.")
             else:
-                st.info("No se encontraron productos.")
-        else:
-            st.info("Escribe al menos una letra para buscar.")
+                st.info("Escribe al menos una letra para buscar.")
+            
+            if st.button("Cerrar", use_container_width=True):
+                st.session_state.mostrar_buscador = False
+                st.rerun()
+        
+        buscador_nombre()
     
     # ============================================
     # CARRITO SIMPLIFICADO
@@ -1117,7 +1048,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
         # ============================================
         # REDONDEO AUTOMÁTICO Y EXCEDENTE
         # ============================================
-        import math
         total_venta_bs = total_venta_usd * tasa
         total_redondeado_bs = math.ceil(total_venta_bs / 10) * 10
         total_redondeado_usd = total_redondeado_bs / tasa if tasa > 0 else 0
@@ -1155,16 +1085,14 @@ elif opcion == "🛒 PUNTO DE VENTA":
             total_pagado_bs = p_bs_ef + p_movil + p_punto
             total_pagado_equiv_usd = total_pagado_usd + (total_pagado_bs / tasa if tasa else 0)
             
-            # El total de la venta es lo que el cliente paga (si es suficiente)
             if total_pagado_equiv_usd >= total_redondeado_usd - 0.01:
                 total_venta_usd_final = total_pagado_equiv_usd
                 total_venta_bs_final = total_venta_usd_final * tasa
-                vuelto_usd = 0  # No hay vuelto porque el pago es mayor o igual
+                vuelto_usd = 0
             else:
-                # Si el pago es insuficiente, no se permite cobrar (esto ya está validado con el disabled del botón)
                 total_venta_usd_final = total_pagado_equiv_usd
                 total_venta_bs_final = total_venta_usd_final * tasa
-                vuelto_usd = -1  # Señal de que falta pago
+                vuelto_usd = -1
             
             st.divider()
             col_r1, col_r2, col_r3 = st.columns(3)
@@ -1188,7 +1116,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
                 st.session_state.carrito_version += 1
                 st.rerun()
         with col_b2:
-            # Validar que el pago sea suficiente (vuelto >= 0)
             if st.button("✅ Cobrar y cerrar cuenta", type="primary", use_container_width=True, disabled=not (vuelto_usd >= -0.01 and carrito)):
                 try:
                     items_res = [f"{item['cantidad']:.0f}x {item['nombre']}" for item in carrito]
@@ -1198,7 +1125,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
                     
                     info_cli = f" - Cliente: {cliente_actual.get('cliente', '')}" if cliente_actual.get('cliente') else ""
                     
-                    # El total de la venta es el monto pagado (sin vuelto)
                     venta = {
                         "id_cierre": id_turno,
                         "producto": ", ".join(items_res),
@@ -1324,7 +1250,7 @@ elif opcion == "💸 GASTOS":
                 st.warning("⚠️ Complete los campos obligatorios (*)")
 
 # ============================================
-# MÓDULO 4: HISTORIAL DE VENTAS (OPTIMIZADO)
+# MÓDULO 4: HISTORIAL DE VENTAS (CON PAGINACIÓN Y FACTURA)
 # ============================================
 elif opcion == "📜 HISTORIAL":
     requiere_usuario()
@@ -1337,7 +1263,7 @@ elif opcion == "📜 HISTORIAL":
     """, unsafe_allow_html=True)
     
     # ============================================
-    # INICIALIZAR ESTADO DE FILTROS (PERSISTENTES)
+    # INICIALIZAR ESTADO DE FILTROS Y PAGINACIÓN
     # ============================================
     if 'historial_filtros' not in st.session_state:
         st.session_state.historial_filtros = {
@@ -1347,6 +1273,9 @@ elif opcion == "📜 HISTORIAL":
             'estado': "Todos",
             'buscar': ""
         }
+    if 'historial_offset' not in st.session_state:
+        st.session_state.historial_offset = 0
+    LIMITE = 100
     
     # ============================================
     # FORMULARIO DE FILTROS
@@ -1373,13 +1302,13 @@ elif opcion == "📜 HISTORIAL":
             'estado': estado_filtro,
             'buscar': buscar_texto
         }
+        st.session_state.historial_offset = 0
         st.rerun()
     
     # ============================================
-    # CONSULTAR VENTAS CON FILTROS Y SOLO COLUMNAS NECESARIAS
+    # CONSULTAR VENTAS CON FILTROS Y PAGINACIÓN
     # ============================================
     filtros = st.session_state.historial_filtros
-    # Seleccionamos solo las columnas que necesitamos para reducir la carga
     columnas = "id, id_cierre, fecha, producto, total_usd, monto_cobrado_bs, estado, items, pago_divisas, pago_zelle, pago_otros, pago_efectivo, pago_movil, pago_punto, costo_venta, cliente"
     query = db.table("ventas").select(columnas).order("fecha", desc=True)
     
@@ -1394,6 +1323,9 @@ elif opcion == "📜 HISTORIAL":
     if filtros['buscar']:
         query = query.ilike("producto", f"%{filtros['buscar']}%")
     
+    # Paginación
+    query = query.range(st.session_state.historial_offset, st.session_state.historial_offset + LIMITE - 1)
+    
     try:
         response = query.execute()
         df = pd.DataFrame(response.data) if response.data else pd.DataFrame()
@@ -1402,7 +1334,7 @@ elif opcion == "📜 HISTORIAL":
         df = pd.DataFrame()
     
     # ============================================
-    # PROCESAMIENTO Y VISUALIZACIÓN (SIN CAMBIOS)
+    # PROCESAMIENTO Y VISUALIZACIÓN
     # ============================================
     if not df.empty:
         df['fecha_dt'] = pd.to_datetime(df['fecha'])
@@ -1435,7 +1367,6 @@ elif opcion == "📜 HISTORIAL":
         cantidad_ventas = len(df_activas)
         promedio_usd = total_usd / cantidad_ventas if cantidad_ventas > 0 else 0
         
-        # Tarjetas resumen
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         with col_m1:
             st.markdown(f"""
@@ -1472,8 +1403,8 @@ elif opcion == "📜 HISTORIAL":
         
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Cabeceras de la tabla (igual que antes)
-        col_h1, col_h2, col_h3, col_h4, col_h5, col_h6, col_h7, col_h8, col_h9 = st.columns([0.6, 0.8, 0.8, 2.2, 1.0, 1.0, 1.5, 0.8, 0.8])
+        # Cabeceras de la tabla (agregamos columna Factura)
+        col_h1, col_h2, col_h3, col_h4, col_h5, col_h6, col_h7, col_h8, col_h9, col_h10 = st.columns([0.6, 0.8, 0.8, 2.2, 1.0, 1.0, 1.5, 0.8, 0.8, 0.8])
         col_h1.markdown("**Turno**")
         col_h2.markdown("**ID**")
         col_h3.markdown("**Hora**")
@@ -1482,7 +1413,8 @@ elif opcion == "📜 HISTORIAL":
         col_h6.markdown("**Bs**")
         col_h7.markdown("**Tipo de pago**")
         col_h8.markdown("**Estado**")
-        col_h9.markdown("**Acción**")
+        col_h9.markdown("**Anular**")
+        col_h10.markdown("**Factura**")
         st.markdown("<hr style='margin:0; margin-bottom:0.5rem;'>", unsafe_allow_html=True)
         
         for idx, venta in df.iterrows():
@@ -1490,7 +1422,7 @@ elif opcion == "📜 HISTORIAL":
             badge = '<span class="badge-anulada">ANULADA</span>' if es_anulado else '<span class="badge-finalizada">FINALIZADA</span>'
             productos = venta['producto'][:35] + "..." if len(venta['producto']) > 35 else venta['producto']
             
-            cols = st.columns([0.6, 0.8, 0.8, 2.2, 1.0, 1.0, 1.5, 0.8, 0.8])
+            cols = st.columns([0.6, 0.8, 0.8, 2.2, 1.0, 1.0, 1.5, 0.8, 0.8, 0.8])
             with cols[0]:
                 st.markdown(f"<span style='font-weight:500;'>#{venta['id_cierre']}</span>", unsafe_allow_html=True)
             with cols[1]:
@@ -1534,26 +1466,108 @@ elif opcion == "📜 HISTORIAL":
                         st.markdown("🔒")
                 else:
                     st.markdown("—")
+            with cols[9]:
+                # Botón para ver factura en popover
+                with st.popover("👁️", help="Ver factura"):
+                    st.markdown("### 🧾 FACTURA DE VENTA")
+                    st.markdown(f"""
+                        <div style="background:white; padding:15px; border-radius:10px; border:1px solid #ddd;">
+                            <p><b>Turno:</b> #{venta['id_cierre']}</p>
+                            <p><b>Fecha:</b> {venta['fecha_dt'].strftime('%d/%m/%Y %H:%M')}</p>
+                            <p><b>Cajero:</b> {venta.get('cliente', 'N/A')}</p>
+                            <p><b>Cliente:</b> {venta.get('cliente', 'General')}</p>
+                            <hr>
+                            <table style="width:100%; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="border-bottom:1px solid #ccc;">
+                                        <th style="text-align:left;">Cant</th>
+                                        <th style="text-align:left;">Producto</th>
+                                        <th style="text-align:right;">Precio</th>
+                                        <th style="text-align:right;">Subtotal</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                    """, unsafe_allow_html=True)
+                    items = venta.get('items')
+                    if isinstance(items, str):
+                        items = json.loads(items)
+                    if items and isinstance(items, list):
+                        for item in items:
+                            st.markdown(f"""
+                                <tr>
+                                    <td style="padding:4px;">{item.get('cantidad', 0):.0f}</td>
+                                    <td style="padding:4px;">{item.get('nombre', '')}</td>
+                                    <td style="padding:4px; text-align:right;">${item.get('precio', 0):.2f}</td>
+                                    <td style="padding:4px; text-align:right;">${item.get('subtotal', 0):.2f}</td>
+                                </tr>
+                            """, unsafe_allow_html=True)
+                    st.markdown(f"""
+                                </tbody>
+                            </table>
+                            <hr>
+                            <p><b>Total USD:</b> ${venta['total_usd']:.2f}</p>
+                            <p><b>Total Bs:</b> {venta['monto_cobrado_bs']:.2f} Bs</p>
+                            <hr>
+                            <p><b>Pagos:</b></p>
+                            <ul>
+                    """, unsafe_allow_html=True)
+                    if venta.get('pago_efectivo', 0) > 0:
+                        st.markdown(f"<li>Efectivo Bs: {venta['pago_efectivo']:,.2f}</li>", unsafe_allow_html=True)
+                    if venta.get('pago_movil', 0) > 0:
+                        st.markdown(f"<li>Pago Móvil Bs: {venta['pago_movil']:,.2f}</li>", unsafe_allow_html=True)
+                    if venta.get('pago_punto', 0) > 0:
+                        st.markdown(f"<li>Punto Venta Bs: {venta['pago_punto']:,.2f}</li>", unsafe_allow_html=True)
+                    if venta.get('pago_divisas', 0) > 0:
+                        st.markdown(f"<li>Efectivo USD: ${venta['pago_divisas']:.2f}</li>", unsafe_allow_html=True)
+                    if venta.get('pago_zelle', 0) > 0:
+                        st.markdown(f"<li>Zelle USD: ${venta['pago_zelle']:.2f}</li>", unsafe_allow_html=True)
+                    if venta.get('pago_otros', 0) > 0:
+                        st.markdown(f"<li>Otros USD: ${venta['pago_otros']:.2f}</li>", unsafe_allow_html=True)
+                    total_pagado_usd = sum([
+                        venta.get('pago_divisas', 0),
+                        venta.get('pago_zelle', 0),
+                        venta.get('pago_otros', 0),
+                        (venta.get('pago_efectivo', 0) + venta.get('pago_movil', 0) + venta.get('pago_punto', 0)) / venta.get('tasa_cambio', 60)
+                    ])
+                    vuelto = total_pagado_usd - venta['total_usd']
+                    st.markdown(f"""
+                            </ul>
+                            <hr>
+                            <p><b>Vuelto:</b> ${vuelto:.2f} / {(vuelto * venta.get('tasa_cambio', 60)):.2f} Bs</p>
+                            <p style="text-align:center;">¡Gracias por su compra!</p>
+                        </div>
+                    """, unsafe_allow_html=True)
             if idx < len(df) - 1:
                 st.markdown("<hr style='margin:0.2rem 0; opacity:0.3;'>", unsafe_allow_html=True)
         
-        if not df_activas.empty:
-            st.markdown(f"""
-                <div style='background-color: #f0f2f6; padding: 1rem; border-radius: 8px; margin-top: 1rem;'>
-                    <div style='display: flex; justify-content: space-between; align-items: center;'>
-                        <span style='font-weight:600;'>📊 TOTALES EN PANTALLA (ventas activas):</span>
-                        <span>
-                            <span style='color: #28a745; font-weight:600;'>${total_usd:,.2f}</span> | 
-                            <span style='color: #007bff; font-weight:600;'>{total_bs:,.0f} Bs</span>
-                        </span>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
+        # Controles de paginación
+        col_pag1, col_pag2, col_pag3 = st.columns([1, 1, 1])
+        with col_pag1:
+            if st.session_state.historial_offset > 0:
+                if st.button("⬅️ Anteriores", use_container_width=True):
+                    st.session_state.historial_offset -= LIMITE
+                    st.rerun()
+        with col_pag2:
+            st.caption(f"Mostrando {len(df)} ventas (página {st.session_state.historial_offset//LIMITE + 1})")
+        with col_pag3:
+            if len(df) == LIMITE:
+                if st.button("Siguientes ➡️", use_container_width=True):
+                    st.session_state.historial_offset += LIMITE
+                    st.rerun()
+        
+        if st.button("🔍 Nueva búsqueda", use_container_width=True):
+            st.session_state.historial_offset = 0
+            st.session_state.historial_filtros = {'fecha_desde': None, 'fecha_hasta': None, 'turno': 0, 'estado': "Todos", 'buscar': ""}
+            st.rerun()
     else:
         st.info("📭 No hay ventas que coincidan con los filtros seleccionados.")
+        if st.button("🔍 Nueva búsqueda", use_container_width=True):
+            st.session_state.historial_offset = 0
+            st.session_state.historial_filtros = {'fecha_desde': None, 'fecha_hasta': None, 'turno': 0, 'estado': "Todos", 'buscar': ""}
+            st.rerun()
 
 # ============================================
-# MÓDULO 5: CIERRE DE CAJA (CON STEP=1.0)
+# MÓDULO 5: CIERRE DE CAJA
 # ============================================
 elif opcion == "📊 CIERRE DE CAJA":
     st.markdown("<h1 class='main-header'>📊 Cierre de Caja</h1>", unsafe_allow_html=True)
@@ -1923,6 +1937,34 @@ elif opcion == "👥 ADMINISTRACIÓN":
         st.info("No hay otros usuarios para editar (solo tú estás registrado).")
     
     st.markdown("---")
+    
+    # ============================================
+    # CAMBIAR MI PROPIA CLAVE
+    # ============================================
+    st.subheader("🔑 Cambiar mi clave")
+    with st.form("cambiar_mi_clave"):
+        st.info(f"Estás cambiando la clave del usuario: **{st.session_state.usuario_actual['usuario']}**")
+        nueva_clave_mi = st.text_input("Nueva clave", type="password", placeholder="Mínimo 4 caracteres")
+        confirmar_clave_mi = st.text_input("Confirmar nueva clave", type="password")
+        if st.form_submit_button("Actualizar mi clave", type="primary", use_container_width=True):
+            if nueva_clave_mi and len(nueva_clave_mi) >= 4:
+                if nueva_clave_mi == confirmar_clave_mi:
+                    if actualizar_usuario(st.session_state.usuario_actual['id'], 'clave', nueva_clave_mi):
+                        st.toast("✅ Clave actualizada correctamente", icon="✅")
+                        time.sleep(0.5)
+                        st.rerun()
+                    else:
+                        st.error("Error al actualizar la clave")
+                else:
+                    st.error("Las claves no coinciden")
+            else:
+                st.error("La clave debe tener al menos 4 caracteres")
+    
+    st.markdown("---")
+    
+    # ============================================
+    # CREAR NUEVO USUARIO
+    # ============================================
     st.subheader("➕ Crear nuevo usuario")
     with st.form("form_nuevo_usuario"):
         col_n1, col_n2 = st.columns(2)
