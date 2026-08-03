@@ -722,7 +722,7 @@ if opcion == "📦 INVENTARIO":
         st.exception(e)
 
 # ============================================
-# MÓDULO 2: PUNTO DE VENTA (CON BUSCADOR POR NOMBRE EN DIÁLOGO)
+# MÓDULO 2: PUNTO DE VENTA (CON BUSCADOR POR NOMBRE EN POPOVER ESTILO LICORERÍA)
 # ============================================
 elif opcion == "🛒 PUNTO DE VENTA":
     requiere_turno()
@@ -758,10 +758,6 @@ elif opcion == "🛒 PUNTO DE VENTA":
     # Contador de versión del carrito
     if 'carrito_version' not in st.session_state:
         st.session_state.carrito_version = 0
-    
-    # Variable para controlar el diálogo de búsqueda
-    if 'mostrar_buscador' not in st.session_state:
-        st.session_state.mostrar_buscador = False
     
     st.subheader("👥 Seleccionar Cliente / Cuenta")
     col_clientes = st.columns(4)
@@ -907,58 +903,45 @@ elif opcion == "🛒 PUNTO DE VENTA":
             st.warning(f"Código '{codigo}' no encontrado o sin stock.")
     
     # ============================================
-    # BOTÓN PARA BUSCAR POR NOMBRE (DIÁLOGO)
+    # BUSCADOR POR NOMBRE EN POPOVER (ESTILO LICORERÍA)
     # ============================================
-    if st.button("🔍 Buscar por nombre", use_container_width=True):
-        st.session_state.mostrar_buscador = True
-        st.rerun()
-    
-    if st.session_state.get('mostrar_buscador', False):
-        @st.dialog("🔍 Buscar producto por nombre")
-        def buscador_nombre():
-            st.markdown("**Escribe el nombre del producto:**")
-            busqueda = st.text_input("", key="buscar_nombre_dialog", placeholder="Ej: Harina, Aceite...", label_visibility="collapsed")
-            
-            if busqueda:
-                resultados = []
-                for p in inventario:
-                    if p['stock'] <= 0:
-                        continue
-                    if busqueda.lower() in p['nombre'].lower():
-                        resultados.append(p)
-                resultados = resultados[:30]
-                
-                if resultados:
-                    st.markdown("---")
-                    cols_head = st.columns([3, 1, 1, 1, 0.8])
-                    cols_head[0].markdown("**Producto**")
-                    cols_head[1].markdown("**Stock**")
-                    cols_head[2].markdown("**Precio USD**")
-                    cols_head[3].markdown("**Precio Bs**")
-                    cols_head[4].markdown("")
-                    st.markdown("---")
-                    for prod in resultados:
-                        precio_usd = float(prod['precio_detal'])
-                        precio_bs = precio_usd * tasa
-                        c1, c2, c3, c4, c5 = st.columns([3, 1, 1, 1, 0.8])
-                        c1.write(prod['nombre'])
-                        c2.write(f"{prod['stock']:.0f}")
-                        c3.write(f"${precio_usd:.2f}")
-                        c4.write(f"{precio_bs:,.2f} Bs")
-                        if c5.button("➕", key=f"dialog_{prod['id']}"):
-                            agregar_producto(prod)
-                            st.session_state.mostrar_buscador = False
-                            st.rerun()
-                else:
-                    st.info("No se encontraron productos.")
-            else:
-                st.info("Escribe al menos una letra para buscar.")
-            
-            if st.button("Cerrar", use_container_width=True):
-                st.session_state.mostrar_buscador = False
-                st.rerun()
+    with st.popover("🔍 Buscar por nombre", use_container_width=True):
+        # Campo de búsqueda con clave fija (no se reinicia al escribir)
+        busqueda = st.text_input("", placeholder="Escribe nombre del producto...", key="buscar_nombre_popover")
         
-        buscador_nombre()
+        if busqueda:
+            resultados = []
+            for p in inventario:
+                if p['stock'] <= 0:
+                    continue
+                if busqueda.lower() in p['nombre'].lower():
+                    resultados.append(p)
+            resultados = resultados[:30]
+            
+            if resultados:
+                st.markdown("---")
+                cols_head = st.columns([3, 1, 1, 1])
+                cols_head[0].markdown("**Producto**")
+                cols_head[1].markdown("**Stock**")
+                cols_head[2].markdown("**Precio USD**")
+                cols_head[3].markdown("**Precio Bs**")
+                st.markdown("---")
+                for prod in resultados:
+                    precio_usd = float(prod['precio_detal'])
+                    precio_bs = precio_usd * tasa
+                    c1, c2, c3, c4, c5 = st.columns([3, 1, 1, 1, 0.5])
+                    c1.write(prod['nombre'])
+                    c2.write(f"{prod['stock']:.0f}")
+                    c3.write(f"${precio_usd:.2f}")
+                    c4.write(f"{precio_bs:,.2f} Bs")
+                    if c5.button("➕", key=f"pop_{prod['id']}"):
+                        agregar_producto(prod)
+                        # El rerun cerrará el popover
+                        st.rerun()
+            else:
+                st.info("No se encontraron productos.")
+        else:
+            st.info("Escribe el nombre del producto para buscar")
     
     # ============================================
     # CARRITO SIMPLIFICADO
