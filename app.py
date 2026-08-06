@@ -1550,7 +1550,7 @@ elif opcion == "📜 HISTORIAL":
             st.rerun()
 
 # ============================================
-# MÓDULO 5: CIERRE DE CAJA
+# MÓDULO 5: CIERRE DE CAJA (CORREGIDO: REPOSICIÓN Y GANANCIAS)
 # ============================================
 elif opcion == "📊 CIERRE DE CAJA":
     st.markdown("<h1 class='main-header'>📊 Cierre de Caja</h1>", unsafe_allow_html=True)
@@ -1606,13 +1606,20 @@ elif opcion == "📊 CIERRE DE CAJA":
         col_info2.info(f"👤 Abrió: {usuario_apertura}")
         col_info3.info(f"💱 Tasa: {tasa:.2f} Bs/$")
 
+        # 🔥 CARGAR VENTAS Y GASTOS
         ventas = db.table("ventas").select("*").eq("id_cierre", id_turno).eq("estado", "Finalizado").execute().data or []
         gastos = db.table("gastos").select("*").eq("id_cierre", id_turno).execute().data or []
 
+        # 🔥 CALCULAR TOTALES CORRECTAMENTE
         total_ventas_usd = sum(float(v.get('total_usd', 0)) for v in ventas)
-        total_costos = sum(float(v.get('costo_venta', 0)) for v in ventas)
+        total_costos = sum(float(v.get('costo_venta', 0)) for v in ventas)  # Reposición
         total_gastos = sum(float(g.get('monto_usd', 0)) for g in gastos)
 
+        # 🔥 GANANCIA NETA: Ventas - Costos - Gastos
+        ganancia_neta = total_ventas_usd - total_costos - total_gastos
+        reposicion = total_costos  # Para mostrarla con nombre claro
+
+        # Pagos detallados (sin cambios)
         total_pagos_usd = sum(
             float(v.get('pago_divisas', 0)) +
             float(v.get('pago_zelle', 0)) +
@@ -1624,10 +1631,6 @@ elif opcion == "📊 CIERRE DE CAJA":
             float(v.get('pago_punto', 0)) for v in ventas
         )
 
-        ganancia_bruta = total_ventas_usd - total_costos
-        ganancia_neta = ganancia_bruta - total_gastos
-        reposicion = total_costos
-
         total_efectivo_usd = sum(float(v.get('pago_divisas', 0)) for v in ventas)
         total_zelle = sum(float(v.get('pago_zelle', 0)) for v in ventas)
         total_otros_usd = sum(float(v.get('pago_otros', 0)) for v in ventas)
@@ -1638,7 +1641,7 @@ elif opcion == "📊 CIERRE DE CAJA":
         st.subheader("📈 Resumen del turno")
         col_r1, col_r2, col_r3, col_r4 = st.columns(4)
         col_r1.metric("💰 Ventas totales", f"${total_ventas_usd:,.2f}")
-        col_r2.metric("📦 Reposición", f"${reposicion:,.2f}")
+        col_r2.metric("📦 Reposición (costo)", f"${reposicion:,.2f}")
         col_r3.metric("💸 Gastos", f"${total_gastos:,.2f}")
         col_r4.metric("📊 Ganancia neta", f"${ganancia_neta:,.2f}")
 
@@ -1687,6 +1690,7 @@ elif opcion == "📊 CIERRE DE CAJA":
             total_bs_fisico = montos['efec_bs'] + montos['pmovil_bs'] + montos['punto_bs']
             total_usd_fisico = montos['efec_usd'] + montos['zelle_usd'] + montos['otros_usd']
 
+            # Esperado en Bs y USD
             esperado_bs = fondo_bs_ini + total_pagos_bs - (total_gastos * tasa)
             esperado_usd = fondo_usd_ini + total_pagos_usd - total_gastos
 
@@ -1721,11 +1725,12 @@ elif opcion == "📊 CIERRE DE CAJA":
 
             if st.button("🔒 CONFIRMAR Y CERRAR TURNO", type="primary", use_container_width=True, disabled=not confirmar):
                 try:
+                    # 🔥 GUARDAR CIERRE CON DATOS CORRECTOS
                     datos_cierre = {
                         "fecha_cierre": datetime.now().isoformat(),
                         "total_ventas": total_ventas_usd,
-                        "total_costos": total_costos,
-                        "total_ganancias": ganancia_neta,
+                        "total_costos": total_costos,  # Reposición
+                        "total_ganancias": ganancia_neta,  # Ganancia neta
                         "diferencia": diff_total,
                         "tasa_cierre": tasa,
                         "estado": "cerrado",
@@ -1740,6 +1745,7 @@ elif opcion == "📊 CIERRE DE CAJA":
                         "zelle_fisico": montos['zelle_usd'],
                         "otros_fisico": montos['otros_usd']
                     }
+
                     db.table("cierres").update(datos_cierre).eq("id", id_turno).execute()
                     db.table("gastos").update({"estado": "cerrado"}).eq("id_cierre", id_turno).execute()
 
@@ -1756,15 +1762,16 @@ elif opcion == "📊 CIERRE DE CAJA":
                         st.markdown(f"**Abrió:** {usuario_apertura}")
                         st.markdown(f"**Cerró:** {st.session_state.usuario_actual['nombre'] if st.session_state.usuario_actual else 'Anónimo'}")
                         st.markdown(f"**Fecha:** {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-                    with col_y2:
                         st.markdown(f"**Ventas:** ${total_ventas_usd:,.2f}")
-                        st.markdown(f"**Reposición:** ${reposicion:,.2f}")
+                        st.markdown(f"**Reposición (costo):** ${reposicion:,.2f}")
+                    with col_y2:
                         st.markdown(f"**Gastos:** ${total_gastos:,.2f}")
                         st.markdown(f"**Ganancia neta:** ${ganancia_neta:,.2f}")
                     st.markdown(f"**Diferencia total:** ${diff_total:+,.2f}")
 
                     if st.button("🔄 Volver al inicio"):
                         st.rerun()
+
                 except Exception as e:
                     st.error(f"Error al cerrar: {e}")
 
