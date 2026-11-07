@@ -291,7 +291,7 @@ def exportar_excel(df, nombre_archivo):
     return f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{nombre_archivo}.xlsx">📥 Descargar Excel</a>'
 
 # ============================================
-# MÓDULO 1: INVENTARIO (CON PRECIO OFERTA DIVISAS)
+# MÓDULO 1: INVENTARIO (CON PRECIO OFERTA DIVISAS E IMPORTACIÓN MASIVA)
 # ============================================
 if opcion == "📦 INVENTARIO":
     st.markdown("<h1 class='main-header'>📦 Gestión de Inventario</h1>", unsafe_allow_html=True)
@@ -488,7 +488,77 @@ if opcion == "📦 INVENTARIO":
                         precio_df = df[['nombre', 'categoria', 'precio_detal', 'precio_mayor', 'precio_divisas', 'min_mayor']].copy()
                         precio_df.columns = ['Producto', 'Categoría', 'Detal $', 'Mayor $', 'Oferta Divisas $', 'Mín. Mayor']
                         st.markdown(exportar_excel(precio_df.sort_values('Categoría'), f"lista_precios_{datetime.now().strftime('%Y%m%d')}"), unsafe_allow_html=True)
-            else: st.info("No hay productos para respaldar")
+            else: 
+                st.info("No hay productos para respaldar")
+            
+            # ============================================
+            # NUEVO: IMPORTACIÓN MASIVA DE STOCK
+            # ============================================
+            st.divider()
+            st.subheader("🚀 Importación Masiva de Stock")
+            st.info("Sube el Excel que descargaste y modificaste. El sistema leerá las columnas 'Producto' y 'Stock' y actualizará la base de datos sin duplicar nada.")
+            
+            archivo_excel = st.file_uploader("Sube tu archivo Excel (.xlsx)", type=["xlsx"])
+            
+            if archivo_excel is not None:
+                if st.button("Actualizar Stock en el Sistema", type="primary", use_container_width=True):
+                    with st.spinner("Actualizando productos, por favor espera..."):
+                        try:
+                            # Leer el excel
+                            df_import = pd.read_excel(archivo_excel)
+                            
+                            # Limpiar nombres de columnas
+                            df_import.columns = [str(c).strip() for c in df_import.columns]
+                            
+                            actualizados = 0
+                            no_encontrados = 0
+                            
+                            # Función auxiliar para limpiar comas y convertir a número
+                            def limpiar_numero(val):
+                                if pd.isna(val): return 0.0
+                                val_str = str(val).replace(',', '.')
+                                try: return float(val_str)
+                                except: return 0.0
+
+                            for index, row in df_import.iterrows():
+                                # Buscamos el nombre en la columna "Producto" o "nombre"
+                                nombre_prod = str(row.get('Producto', row.get('nombre', ''))).strip()
+                                
+                                if not nombre_prod or nombre_prod == 'nan':
+                                    continue
+                                    
+                                # Buscar si el producto existe en la base de datos
+                                res = db.table("inventario").select("id").eq("nombre", nombre_prod).execute()
+                                
+                                if res.data:
+                                    id_prod = res.data[0]['id']
+                                    update_data = {}
+                                    
+                                    # Extraer los datos de las columnas del Excel
+                                    if 'Stock' in row: update_data['stock'] = limpiar_numero(row['Stock'])
+                                    if 'Costo $' in row: update_data['costo'] = limpiar_numero(row['Costo $'])
+                                    if 'Precio Detal $' in row: update_data['precio_detal'] = limpiar_numero(row['Precio Detal $'])
+                                    if 'Precio Mayor $' in row: update_data['precio_mayor'] = limpiar_numero(row['Precio Mayor $'])
+                                    if 'Oferta Divisas $' in row: update_data['precio_divisas'] = limpiar_numero(row['Oferta Divisas $'])
+                                    if 'Min. Mayor' in row: update_data['min_mayor'] = int(limpiar_numero(row['Min. Mayor']))
+                                    if 'Categoría' in row: update_data['categoria'] = str(row['Categoría']).strip()
+                                    
+                                    # Actualizar en Supabase
+                                    db.table("inventario").update(update_data).eq("id", id_prod).execute()
+                                    actualizados += 1
+                                else:
+                                    no_encontrados += 1
+                                    
+                            st.success(f"✅ ¡Éxito! Se actualizaron {actualizados} productos.")
+                            if no_encontrados > 0:
+                                st.warning(f"⚠️ Hubo {no_encontrados} productos en tu Excel que no se encontraron en el sistema (revisa si cambiaste alguna letra del nombre por error).")
+                            
+                            time.sleep(2)
+                            st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"Error al importar: {e}")
+                            
     except Exception as e:
         st.error(f"Error en inventario: {e}")
         st.exception(e)
